@@ -1,0 +1,158 @@
+#
+# Dwarf keyboard mapping for a german keyboard on linux
+#
+
+#
+# Syntax:
+#
+# - empty lines or lines starting with a # character are ignored
+#
+# - each other line defines a single mapping from a real key to a key
+#   of the emulated Xerox 6085 keyboard
+#
+# - a mapping consists of an optional modifier and a key identification,
+#   followed by a colon (:) followed by the key name of a Xerox Level V keyboard
+#
+# - the key identification is either the Java name of the key as defined
+#   in the AWT-class KeyEvent or the hexcode of the extended keycode for the key
+#   in the form xHHHHHHHH
+#   Example: the "zero" key can be given either as VK_0 or x00000030
+#   (Dwarfs enum eKeyEventCode also defines the key names a transliteration of
+#   the original KeyEvent constants) 
+#
+# - the Control-key (left or right) is the modifier, allowing to generate alternative
+#   Xerox keys; to specify this modifier, prefix the Java key identification with: Ctrl!
+#   Example: the letter key P with the modifier can be given alternatively as:
+#               Ctrl!VK_P
+#               Ctrl!0x000050
+#
+# - the Xerox key names identify the key of a 6085 workstation keyboard, the key names
+#   are listed in the Dwarf enum eLevelVKey and (probably) identify the key positions
+#   on an english keyboard 
+#
+# - Examples:
+#   -> define the mapping of the "P" key as both the letter and the "Props" key:
+#               VP_P : P
+#               Ctrl!VK_P : Props
+#   -> define the Alt-key (left to space bar) as the "Keyboard" key:
+#               VK_ALT : Special
+#   -> define the AltGr-key (right to the space bar) as the "Expand" key for
+#      both Linux (first line) and Window (second line):
+#               VK_ALT_GRAPH : Expand
+#               Ctrl!VK_ALT : Expand
+#
+# - attention:
+#   -> the interpretation of the tokens is case-sensitive, i.e. the
+#      following lines will not be recognized and logged to the console:
+#               Ctrl!0X000050 : Props                (uppercase X)
+#               ctrl!VK_P : Props                    (lowercase c)
+#               Ctrl!VP_P : props                    (props instead of Props)
+#   -> if a keyboard mapping file is used, there are no defaults, i.e. keyboard
+#      keys not mapped in the file will not be usable in Dwarf
+#
+# - hint: the Java identification for keyboard key can be determined by starting
+#   Dwarf with the -logkeypressed command line parameter, so each key press (except
+#   for the Control key) dispatched to Dwarfs screen subwindow will be logged to
+#   the console with both the hexcode and the key name (if available)
+# 
+
+
+# first row: ^1234567890ß'
+VK_DEAD_CIRCUMFLEX : Bullet
+VK_1 : One
+VK_2 : Two
+VK_3 : Three
+VK_4 : Four
+VK_5 : Five
+VK_6 : Six
+VK_7 : Seven
+VK_8 : Eight
+VK_9 : Nine
+VK_0 : Zero
+x010000DF : Dash
+VK_DEAD_GRAVE : Equal
+VK_DEAD_ACUTE : Equal
+VK_DELETE : Delete
+
+# second row: qwertzuiopü+
+VK_Q : Q
+VK_W : W
+VK_E : E
+VK_R : R
+VK_T : T
+VK_Z : Z
+VK_U : U
+VK_I : I
+VK_O : O
+VK_P : P
+x010000FC : LeftBracket
+VK_PLUS : RightBracket
+
+# third row: asdfghjklöä#
+VK_A : A
+VK_S : S
+VK_D : D
+VK_F : F
+VK_G : G
+VK_H : H
+VK_J : J
+VK_K : K
+VK_L : L
+x010000D6 : SemiColon
+x010000C4 : Quote
+VK_NUMBER_SIGN : DoubleQuote
+
+# fourth row: <yxcvbnm,.-
+# unmapped: <
+VK_Y : Y
+VK_X : X
+VK_C : C
+VK_V : V
+VK_B : B
+VK_N : N
+VK_M : M
+VK_COMMA : Comma
+VK_PERIOD : Period
+VK_MINUS : Slash
+
+# fifth row
+VK_ALT : Special
+VK_SPACE : Space
+VK_ALT_GRAPH : Expand
+Ctrl!VK_ALT : Expand
+
+# others
+VK_SHIFT : LeftShift
+VK_TAB : ParaTab
+VK_ENTER : NewPara
+VK_BACK_SPACE : BS
+VK_CAPS_LOCK : Lock
+
+# function keys
+VK_F1 : Center
+VK_F2 : Bold
+VK_F3 : Italic
+VK_F4 : Case
+# VK_F5 (unmapped to simulate the gap on a 6085 keyboard)
+VK_F6 : Strikeout
+VK_F7 : Underline
+VK_F8 : SuperSub
+VK_F9 : Smaller
+# VK_F10 (unmapped to simulate the gap on a 6085 keyboard)
+VK_F11 : Margins
+VK_F12 : Font
+
+# Xerox special keys
+VK_ESCAPE : Stop
+Ctrl!VK_ESCAPE : Stop
+Ctrl!VK_M : Move
+Ctrl!VK_C : Copy
+Ctrl!VK_S : Same
+Ctrl!VK_O : Open
+Ctrl!VK_P : Props
+Ctrl!VK_F : Find
+Ctrl!VK_H : Help
+Ctrl!VK_U : Undo
+Ctrl!VK_A : Again
+Ctrl!VK_N : Next
+
