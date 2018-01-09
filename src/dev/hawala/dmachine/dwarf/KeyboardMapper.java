@@ -60,7 +60,7 @@ import dev.hawala.dmachine.engine.iUiDataConsumer;
 public class KeyboardMapper {
 	
 	// Java keycode of the Ctrl key
-	private final int CTL_KEY = 0x000011;
+	private final int CTL_KEY;
 
 	// more or less configurable mapping from Java-Key => MesaKey, without and with Ctrl-Key pressed
 	private final Map<Integer,eLevelVKey> normalKeyMapping = new HashMap<>();
@@ -83,10 +83,13 @@ public class KeyboardMapper {
 	/**
 	 * Constructor.
 	 * @param consumer the consumer at the mesa side where to forward keystrokes to
+	 * @param xeroxControlKeyCode the nimeric keycode for the special Xerox Control Key
+	 * @param logKeypressed should all key pressed events be logged to stdout?
 	 */
-	public KeyboardMapper(iUiDataConsumer consumer, boolean logKeypressed) {
+	public KeyboardMapper(iUiDataConsumer consumer, int xeroxControlKeyCode, boolean logKeypressed) {
 		this.uiDataConsumer = consumer;
 		this.logKeypressed = logKeypressed;
+		this.CTL_KEY = xeroxControlKeyCode;
 	}
 	
 	private boolean isPressed(Integer javaKey) {

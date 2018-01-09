@@ -42,6 +42,7 @@ import dev.hawala.dmachine.dwarf.MouseHandler;
 import dev.hawala.dmachine.dwarf.PropertiesExt;
 import dev.hawala.dmachine.dwarf.UiRefresher;
 import dev.hawala.dmachine.dwarf.WindowStateListener;
+import dev.hawala.dmachine.dwarf.eKeyEventCode;
 import dev.hawala.dmachine.dwarf.KeyboardMapper;
 import dev.hawala.dmachine.dwarf.TestUiDataConsumer;
 import dev.hawala.dmachine.dwarf.MainUI.RunningState;
@@ -105,6 +106,7 @@ public class Dwarf {
 	private static String initialFloppy = null;
 	private static String floppyDirectory = null;
 	private static String keyboardMapFile = null;
+	private static int xeroxControlKeyCode = eKeyEventCode.VK_CONTROL.getCode();
 	
 	// control flags for the mesa engine
 	private static boolean doStartEngine = false;
@@ -181,6 +183,30 @@ public class Dwarf {
 		return true;
 	}
 	
+	// parse the keycode either as 0x-hexcode or as VK_-name of the key
+	private static int parseKeycode(String keycode) {
+		if (keycode.startsWith("x")) {
+			try {
+				return Integer.parseInt(keycode.substring(1), 16);
+			} catch (NumberFormatException nfe) {
+				System.out.printf("Invalid hex-code for keycode '%s', using Ctrl-Key instead\n", keycode);
+				return eKeyEventCode.VK_CONTROL.getCode();
+			}
+		} else {
+			eKeyEventCode javaKey = null;
+			try {
+				javaKey = eKeyEventCode.valueOf(keycode);
+			} catch (Exception e) {
+				// ignored
+			}
+			if (javaKey == null) {
+				System.out.printf("Invalid key-name '%s' for keycode, using Ctrl-Key instead\n", keycode);
+				return eKeyEventCode.VK_CONTROL.getCode();
+			}
+			return javaKey.getCode();
+		}
+	}
+	
 	// load the mesa engine configuration from the given file
 	private static boolean initializeConfiguration(String filename) {
 		if (!filename.endsWith(".properties")) { filename += ".properties"; }
@@ -217,6 +243,11 @@ public class Dwarf {
 		floppyDirectory = props.getString("floppyDirectory", floppyDirectory);
 		keyboardMapFile = props.getString("keyboardMapFile", keyboardMapFile);
 		doStartEngine = props.getBoolean("autostart", doStartEngine);
+		
+		String ctrlKeyCode = props.getString("xeroxControlKeyCode", null);
+		if (ctrlKeyCode != null && ctrlKeyCode.length() > 0) {
+			xeroxControlKeyCode = parseKeycode(ctrlKeyCode);
+		}
 		
 		addressBitsReal = Math.max(PrincOpsDefs.MIN_REAL_ADDRESSBITS, Math.min(PrincOpsDefs.MAX_REAL_ADDRESSBITS, addressBitsReal));
 		addressBitsVirtual = Math.max(addressBitsReal, Math.min(PrincOpsDefs.MAX_VIRTUAL_ADDRESSBITS, addressBitsVirtual));
@@ -259,6 +290,7 @@ public class Dwarf {
 		System.out.printf(" bits real   : %d\n", addressBitsReal);
 		System.out.printf(" display     : w( %d ) x h( %d )\n", displayWidth, displayHeight);
 		System.out.printf(" keyboardMap : %s\n", (keyboardMapFile != null) ? keyboardMapFile : "");
+		System.out.printf(" xeroxCtrlKey: 0x%08X\n", xeroxControlKeyCode);
 		System.out.printf(" mac words   : %04X - %04X - %04X (%s)\n", macWords[0], macWords[1], macWords[2], recognizedMacId);
 		System.out.printf(" autostart   : %s\n", (doStartEngine) ? "yes" : "no");
 		System.out.printf(" floppy      : %s\n", (initialFloppy != null) ? initialFloppy : "");
@@ -373,7 +405,7 @@ public class Dwarf {
 				window.getDisplayPane().addMouseMotionListener(mouseHandler);
 				window.getDisplayPane().addMouseListener(mouseHandler);
 				
-				KeyboardMapper kMapper = new KeyboardMapper(uiDataConsumer, logKeys);
+				KeyboardMapper kMapper = new KeyboardMapper(uiDataConsumer, xeroxControlKeyCode, logKeys);
 				if (keyboardMapFile != null) {
 					kMapper.loadConfigFile(keyboardMapFile);
 				} else {

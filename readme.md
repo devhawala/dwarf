@@ -67,6 +67,11 @@ the complete floppy image file is overwritten if the floppy was modified (no del
 Mesa instructions; running Lisp or Smalltalk or Cedar environments (would these be available)
 by loading a different microcode is not possible.
 
+- although no network access is currently supported, the network agent intercepts time server
+queries and simulates the reception of a time server response with the local time (however
+hard-coded to CET without daylight savings); this speeds up booting a little (MP code 0937
+is almost invisible) and lets XDE use central european time instead of californian time.  
+
 ### Running Dwarf
 
 Besides having the Dawn program installed (mainly a simple runnable Java jar file) with the disk
@@ -107,7 +112,7 @@ _optional, default_: `22`
 
 - `addressBitsVirtual`  
 number of address bits for the virtual memory, this must be a value between `addressBitsReal`
-and 25, allowing up to 32768 kwords (64 MByte)
+and 25, allowing up to 32768 kwords (64 MByte)  
 _optional, default_: `23`
 
 - `displayWidth`  
@@ -122,6 +127,12 @@ _optional, default_: `640`
 the name of the keyboard mapping file to use; see the syntax description at the
 beginning of the sample mapping file [kbd\_linux\_de\_DE.map](keyboard-maps/kbd_linux_de_DE.map)  
 _optional, default_: none (if not given, a minimal mapping for a german keyboard is used)
+
+- `xeroxControlKeyCode`  
+the key code for the modifier key to be used for generating the special Xerox keys not available
+of a contemporary standard keyboard; the value can be given as hex code introduced by `0x` or
+as the Java key name (`VK_`...)  
+_optional, default_: 0x00000011 (VK_CONTROL)
 
 - `processorId`    
 the processor or machine id for the Dwarf machine (or MAC address in todays wording)  

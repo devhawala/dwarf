@@ -50,7 +50,7 @@ public class NetworkAgent extends Agent {
 	 */
 	private static final int fcb_lp_receiveIOCB = 0;
 	private static final int fcb_lp_transmitIOCB = 2;
-	private static final int fcb_w_receiveInterruptSelector = 5;
+	private static final int fcb_w_receiveInterruptSelector = 4;
 	private static final int fcb_w_transmitInterruptSelector = 5;
 	private static final int fcb_w_stopAgent = 6;
 	private static final int fcb_w_receiveStopped = 7;
@@ -98,9 +98,42 @@ public class NetworkAgent extends Agent {
 		// TODO: disconnect from network
 	}
 	
+	// temp data for "receiving" the time server response (simulation of a network)
+	private int tmpRecvIocb = 0; 
+	private short tmpRecvIntr = 0;
+	private int tmpRecvBuffer = 0;
+	private int tmpRecvBuflen = 0;
+	private int tmpDequeuedPacketTypeBits = 0;
+	private short[] tmpRecvData = null; 
+	
 	@Override
 	public void refreshMesaMemory() {
-		// TODO: copy packets received so far to mesa memory and raise interrupt (redesign?) 
+		// TODO: copy packets received so far to mesa memory and raise interrupt (redesign?)
+		
+		// receive a time server response packet if available 
+		if (tmpRecvData != null && tmpRecvIocb != 0) {
+			int wlen = Math.min(tmpRecvData.length, tmpRecvBuflen / 2);
+			int status = (wlen == tmpRecvData.length) ? S_completedOK : S_packetTooLong;
+			
+			logf("\n## ## enqueueing temp packet\n\n");
+			
+			for (int i = 0; i < wlen; i++) {
+				Mem.writeWord(tmpRecvBuffer + i, tmpRecvData[i]);
+			}
+			
+			Mem.writeWord(tmpRecvIocb + iocb_w_actualLength, (short)(wlen * 2));
+			Mem.writeWord(tmpRecvIocb + iocb_w_dequeuedPacketTypeStatus, (short)(tmpDequeuedPacketTypeBits | status));
+			Processes.requestMesaInterrupt(tmpRecvIntr);
+			
+			this.packetsReceived++;
+			
+			tmpRecvData = null;
+			tmpRecvIocb = 0;
+			tmpRecvBuffer = 0;
+			tmpRecvBuflen = 0;
+			tmpRecvIntr = 0;
+			tmpDequeuedPacketTypeBits = 0;
+		}
 	}
 	
 	private int packetsSent = 0;
@@ -125,6 +158,7 @@ public class NetworkAgent extends Agent {
 			this.setFcbWord(fcb_w_transmitStopped, PrincOpsDefs.FALSE);
 		}
 		
+		short receiveInterruptSelector = this.getFcbWord(fcb_w_receiveInterruptSelector);
 		short transmitInterruptSelector = this.getFcbWord(fcb_w_transmitInterruptSelector);
 		boolean doTransmitInterrupt = false;
 		
@@ -133,13 +167,21 @@ public class NetworkAgent extends Agent {
 		int sendIocb = this.getFcbDblWord(fcb_lp_transmitIOCB);
 		
 		long nanoTs = System.nanoTime();
-		logf("\n\n--\n-- at %9d.%06d\n--\n", nanoTs / 1000000, nanoTs % 1000000);
+		logf("\n\n--\n-- at %9d.%06d ms\n--\n", nanoTs / 1000000, nanoTs % 1000000);
 		
 		logf("call() - recvIocb = 0x%08X , sendIocb = 0x%08X , stopAgent = %s , hearSelf = %s\n",
 				recvIocb, sendIocb, (stop) ? "true" : "false", (hearSelf) ? "true" : "false");
+		logf("         recvIntr = 0x%04X , xmitIntr = 0x%04X\n",
+				receiveInterruptSelector & 0xFFFF, transmitInterruptSelector & 0xFFFF);
 		if (stop) { return; }
 		
 		// TODO *really* process transmission IOCBs
+		
+		tmpRecvIocb = 0;
+		tmpRecvBuffer = 0;
+		tmpRecvBuflen = 0;
+		tmpRecvIntr = 0;
+		tmpDequeuedPacketTypeBits = 0;
 		
 		int recvCnt = 0;
 		while(recvIocb != 0) {
@@ -150,6 +192,14 @@ public class NetworkAgent extends Agent {
 					recvCnt, recvIocb, bufferAddress, bufferLength);
 			
 			Mem.writeWord(recvIocb + iocb_w_dequeuedPacketTypeStatus, (short)(oldDequeuedPacketTypeBits | S_inProgress));
+			
+			if (recvCnt == 0) {
+				tmpRecvIocb = recvIocb;
+				tmpRecvBuffer = bufferAddress;
+				tmpRecvBuflen = bufferLength;
+				tmpRecvIntr = receiveInterruptSelector;
+				tmpDequeuedPacketTypeBits = oldDequeuedPacketTypeBits;
+			}
 			
 			recvCnt++;
 			recvIocb = Mem.readDblWord(recvIocb + iocb_lp_nextIocb);
@@ -275,7 +325,96 @@ public class NetworkAgent extends Agent {
 			default: clientType = "??";
 			}
 			slogf("              clientType: %d = %s\n", ctype, clientType);
-			dumpXnsBody(typeName, buffer, pByteLen, 3);
+			boolean isTimeReq = dumpXnsBody(typeName, buffer, pByteLen, 3);
+			if (ctype == 1 && isTimeReq) {
+				logf(" ## creating timerequest response\n");
+				
+				// the raw packet
+				short[] b = new short[37];
+				
+				// address components
+				short myNet0 = 0x0044;
+				short myNet1 = 0x1122;
+				short myMac0 = 0x1000;
+				short myMac1 = 0x1A33;
+				short myMac2 = 0x3333;
+				short mySocket = 8;
+				short mac0 = Mem.readWord(buffer + 3);
+				short mac1 = Mem.readWord(buffer + 4);
+				short mac2 = Mem.readWord(buffer + 5);
+				
+				// time data
+				long unixTimeMillis = System.currentTimeMillis();
+				int  milliSecs = (int)(unixTimeMillis % 1000);
+				long unixTimeSecs = unixTimeMillis / 1000;
+				int mesaSecs = (int)((unixTimeSecs + (731 * 86400) + 2114294400) & 0x00000000FFFFFFFFL);
+				short mesaSecs0 = (short)(mesaSecs >>> 16);
+				short mesaSecs1 = (short)(mesaSecs & 0xFFFF);
+				
+				// build the packet component-wise
+				
+				// eth: dst
+				b[0] = mac0;
+				b[1] = mac1;
+				b[2] = mac2;
+				
+				// eth: src
+				b[3] = myMac0;
+				b[4] = myMac1;
+				b[5] = myMac2;
+				
+				// eth: type
+				b[6] = 0x0600;
+				
+				// xns: ckSum
+				b[7] = (short)0xFFFF; // no checksum
+				
+				// xns: length
+				b[8] = 60; // payload length
+				
+				// xns: transport control & packet type
+				b[9] = 4; // hop count = 0 & packet type = PEX
+				
+				// xns: destination endpoint: copy the source destination of the ingone packet
+				b[10] = Mem.readWord(buffer + 16);
+				b[11] = Mem.readWord(buffer + 17);
+				b[12] = Mem.readWord(buffer + 18);
+				b[13] = Mem.readWord(buffer + 19);
+				b[14] = Mem.readWord(buffer + 20);
+				b[15] = Mem.readWord(buffer + 21);
+				
+				// xns: source endpoint: put "our" address with the "local" net and "our" socket
+				b[16] = myNet0;
+				b[17] = myNet1;
+				b[18] = myMac0;
+				b[19] = myMac1;
+				b[20] = myMac2;
+				b[21] = mySocket;
+				
+				// pex: identification
+				b[22] = Mem.readWord(buffer + 22);
+				b[23] = Mem.readWord(buffer + 23);
+				
+				// pex: client type
+				b[24] = 1; // clientType "time"
+				
+				// payload: time response
+				b[25] = 2; // version(0): WORD -- TimeVersion = 2
+				b[26] = 2; // tsBody(1): SELECT type(1): PacketType FROM -- timeResponse = 2
+				b[27] = mesaSecs0; // time(2): WireLong -- computed time
+				b[28] = mesaSecs1;
+				b[29] = 1; // zoneS(4): System.WestEast -- east
+				b[30] = 1; // zoneH(5): [0..177B] -- +1 hour
+				b[31] = 0; // zoneM(6): [0..377B] -- +0 minutes
+				b[32] = 0; // beginDST(7): WORD -- no dst (temp)
+				b[33] = 0; // endDST(8): WORD -- no dst (temp)
+				b[34] = 1; // errorAccurate(9): BOOLEAN -- true
+				b[35] = 0; // absoluteError(10): WireLong]
+				b[36] = (short)((milliSecs > 500) ? 1000 - milliSecs : milliSecs); // no direction ?? (plus or minus)?
+				
+				// enqueue for "sending" back
+				tmpRecvData = b;
+			}
 		} else {
 			dumpXnsBody(typeName, buffer, pByteLen, 0);
 		}
@@ -314,16 +453,19 @@ public class NetworkAgent extends Agent {
 		slogf("              socket  : %04X%s%s\n", w5, (socket == null) ? "" : " - ", (socket == null) ? "" : socket);
 	}
 	
-	private void dumpXnsBody(String prefix, int buffer, int byteLength, int xnsSkip) {
+	private boolean dumpXnsBody(String prefix, int buffer, int byteLength, int xnsSkip) {
 		buffer += 22 + xnsSkip;
 		byteLength -= (15 + xnsSkip) * 2;
 		logf("\n          => xns %s payload ( bytes: %d => words: %d )", prefix, byteLength, (byteLength + 1) / 2);
 		short w = 0;
 		int b = 0;
+		boolean isTimeReq = (byteLength == 4);
 		for (int i = 0; i < byteLength; i++) {
 			if ((i % 2) == 0) {
 				w = Mem.readWord(buffer + (i / 2));
 				b = (w >> 8) & 0xFF;
+				if (i == 0 && w != 2) { isTimeReq = false; }
+				if (i == 2 && w != 1) { isTimeReq = false; }
 			} else {
 				b = w & 0xFF;
 			}
@@ -333,6 +475,7 @@ public class NetworkAgent extends Agent {
 			slogf(" %02X", b);
 		}
 		slogf("\n");
+		return isTimeReq;
 	}
 
 	@Override
