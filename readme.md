@@ -134,6 +134,13 @@ of a contemporary standard keyboard; the value can be given as hex code introduc
 as the Java key name (`VK_`...)  
 _optional, default_: 0x00000011 (VK_CONTROL)
 
+- `resetKeysOnFocusLost`  
+if `true` the keyboard state will be reset to "no keys pressed" when Dwarf loses the input
+focus; when `false` the keyboard will not be reset. Resetting all keys to "up" is useful
+when changing the current window with Alt-TAB, as the Alt-key is a special key on a Xerox
+keyboard.  
+_optional, default_: `true`
+
 - `processorId`    
 the processor or machine id for the Dwarf machine (or MAC address in todays wording)  
 _optional, default_: `00-1D-BA-AE-04-C3`

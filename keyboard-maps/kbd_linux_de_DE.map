@@ -129,18 +129,18 @@ VK_BACK_SPACE : BS
 VK_CAPS_LOCK : Lock
 
 # function keys
-VK_F1 : Center
-VK_F2 : Bold
-VK_F3 : Italic
-VK_F4 : Case
-# VK_F5 (unmapped to simulate the gap on a 6085 keyboard)
+# VK_F1 (unmapped because of conflicts for Help-F1 under Linux-Mint: works once, then only seldom!)
+VK_F2 : Center
+VK_F3 : Bold
+VK_F4 : Italic
+VK_F5 : Case
 VK_F6 : Strikeout
 VK_F7 : Underline
 VK_F8 : SuperSub
 VK_F9 : Smaller
-# VK_F10 (unmapped to simulate the gap on a 6085 keyboard)
-VK_F11 : Margins
-VK_F12 : Font
+VK_F10 : Margins
+VK_F11 : Font
+# VK_F12 (unmapped => free)
 
 # Xerox special keys
 VK_ESCAPE : Stop

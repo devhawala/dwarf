@@ -82,6 +82,15 @@ public class KeyboardAgent extends Agent {
 			this.setFcbWord(i, ALL_KEYS_UP);
 		}
 	}
+	
+	public synchronized void resetKeys() {
+		for (int i = 0; i < FCB_SIZE; i++) {
+			this.uiKeys[i] = ALL_KEYS_UP;
+		}
+		this.uiKeysChanged = true;
+		this.logf("resetKeys()\n");
+		Processes.requestDataRefresh();
+	}
 
 	public synchronized void handleKeyUsage(eLevelVKey key, boolean isPressed) {
 		if (isPressed) {

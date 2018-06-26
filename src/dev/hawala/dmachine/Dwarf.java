@@ -27,6 +27,8 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package dev.hawala.dmachine;
 
 import java.awt.EventQueue;
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -107,6 +109,7 @@ public class Dwarf {
 	private static String floppyDirectory = null;
 	private static String keyboardMapFile = null;
 	private static int xeroxControlKeyCode = eKeyEventCode.VK_CONTROL.getCode();
+	private static boolean resetKeysOnFocusLost = true;
 	
 	// control flags for the mesa engine
 	private static boolean doStartEngine = false;
@@ -248,6 +251,7 @@ public class Dwarf {
 		if (ctrlKeyCode != null && ctrlKeyCode.length() > 0) {
 			xeroxControlKeyCode = parseKeycode(ctrlKeyCode);
 		}
+		resetKeysOnFocusLost = props.getBoolean("resetKeysOnFocusLost", resetKeysOnFocusLost);
 		
 		addressBitsReal = Math.max(PrincOpsDefs.MIN_REAL_ADDRESSBITS, Math.min(PrincOpsDefs.MAX_REAL_ADDRESSBITS, addressBitsReal));
 		addressBitsVirtual = Math.max(addressBitsReal, Math.min(PrincOpsDefs.MAX_VIRTUAL_ADDRESSBITS, addressBitsVirtual));
@@ -291,6 +295,7 @@ public class Dwarf {
 		System.out.printf(" display     : w( %d ) x h( %d )\n", displayWidth, displayHeight);
 		System.out.printf(" keyboardMap : %s\n", (keyboardMapFile != null) ? keyboardMapFile : "");
 		System.out.printf(" xeroxCtrlKey: 0x%08X\n", xeroxControlKeyCode);
+		System.out.printf(" resetKeysOnF: %s\n", (resetKeysOnFocusLost)  ? "yes" : "no");
 		System.out.printf(" mac words   : %04X - %04X - %04X (%s)\n", macWords[0], macWords[1], macWords[2], recognizedMacId);
 		System.out.printf(" autostart   : %s\n", (doStartEngine) ? "yes" : "no");
 		System.out.printf(" floppy      : %s\n", (initialFloppy != null) ? initialFloppy : "");
@@ -412,6 +417,14 @@ public class Dwarf {
 					kMapper.mapDefaults_de_DE();
 				}
 				window.getDisplayPane().addKeyListener(new KeyHandler(kMapper));
+				
+				if (resetKeysOnFocusLost) {
+					FocusListener focusHandler = new FocusListener() {
+						@Override public void focusGained(FocusEvent e) { }
+						@Override public void focusLost(FocusEvent e) { uiDataConsumer.resetKeys(); }
+					};
+					window.getDisplayPane().addFocusListener(focusHandler);
+				}
 				
 				// install the ui refresher (mesa engine => java-ui)
 				uiRefresher = new UiRefresher(window, uiDataConsumer);

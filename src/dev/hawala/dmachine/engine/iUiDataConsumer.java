@@ -45,6 +45,12 @@ public interface iUiDataConsumer {
 	void acceptKeyboardKey(eLevelVKey key, boolean isPressed);
 	
 	/**
+	 * Agent callback to inform the mesa engine that no keys are to
+	 * be considered pressed.
+	 */
+	void resetKeys();
+	
+	/**
 	 * Agent callback to inform the mesa engine about a change
 	 * of the mouse buttons depressions.
 	 *  

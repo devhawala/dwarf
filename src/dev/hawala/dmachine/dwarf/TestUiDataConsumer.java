@@ -69,6 +69,11 @@ public class TestUiDataConsumer implements iUiDataConsumer, Runnable {
 	public void acceptKeyboardKey(eLevelVKey key, boolean isPressed) {
 		System.out.printf("=> xerox key %s %s\n", key.toString(), (isPressed) ? "pressed" : "released");
 	}
+	
+	@Override
+	public void resetKeys() {
+		System.out.printf("=> reset keys\n");
+	}
 
 	@Override
 	public void acceptMouseKey(int key, boolean isPressed) {
