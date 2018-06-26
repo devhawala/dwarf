@@ -78,6 +78,12 @@ public class Agents {
 			if (keyboardAgent == null) { return; }
 			keyboardAgent.handleKeyUsage(key, isPressed);
 		}
+		
+		@Override
+		public void resetKeys() {
+			if (keyboardAgent == null) { return; }
+			keyboardAgent.resetKeys();
+		}
 
 		@Override
 		public void acceptMouseKey(int key, boolean isPressed) {
