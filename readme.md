@@ -79,8 +79,18 @@ and germ files, a configuration file defining the characteristics of the machine
 
 #### Installing or building Dwarf
 
-Dwarf is available as ready to run release on Github: download the newest `dist.jar` package
-from the github repository, unzip the package, done.
+Dwarf is available as ready to run release on Github: download the newest `dist.zip` package
+from the github repository, unzip the package, done (more or less).
+
+The archive `dist.zip` contains a runnable jar `dwarf.jar` and the default keyboard mapping
+file, as well as sample configuration and shell script files for running XDE (Dawn) and
+GlobalView (GVWin) environments.    
+Copy your disk and germ files for the environments into the corresponding directoriesand if
+necessary adapt the filenames in respective configuration file.
+
+Hint: the disk or floppy files should not reside in the same directory as the `dwarf.jar` file,
+as the Java runtime will high probably enforce the read-only access to files in this directory.    
+The `dist.zip` archive contains a exemplary directory structure.
 
 For building from source, download the ZIP or clone the Dwarf Github repository, this gives you
 a project directory that can be imported into Eclipse (at least Mars release, preferably Neon).
