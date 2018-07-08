@@ -45,7 +45,22 @@ like Dandelion (8000 system) or Dove (6085 system):
 
 - one harddisk image
 
-- one floppy drive (1.44 MByte floppies, changeable at runtime)
+- one floppy drive (1.44 MByte raw or legacy IMD/DMK floppies, changeable at runtime)
+
+Dwarf supports the following floppy formats:
+
+- IMD for legacy floppies if the file extension is `.imd` (case-insensitive)
+
+- DMK for legacy floppies if the file extension is `.dmk` (case-insensitive)
+
+- raw format for 3.5" floppies as created by the original emulator on PCs
+
+The term "legacy floppy" means that the image was created from a floppy disk written by
+a 8010 (8" floppy) or a 6085 (5.25" floppy) workstation with a Pilot based OS XDE (4.0 or later)
+or ViewPoint (1.0 or later). Legacy floppy images are mounted in R/O mode, as changes
+cannot be written back into the original format (IMD or DMK).  
+The disk content of the legacy floppy image is implanted in a template 3.5" image
+based on the XDE sector layout. This allows to read the legacy floppy content.
 
 When using or thinking of using Dwarf, some characteristics of the implementation should
 be kept in mind:
@@ -59,9 +74,11 @@ This approach gives fast disk I/O, but possibly requires increasing the Java hea
 large disks (however the "usual" 30 MByte Pilot disk plus 16 MByte real memory can be used
 with Java defaults)
 
-- similarly Dwarf loads a complete virtual floppy disk image file (1.44 MByte) into memory
-for diskette operations. However, when ejecting the floppy or shutting down the machine,
-the complete floppy image file is overwritten if the floppy was modified (no delta file)
+- similarly Dwarf loads a complete virtual floppy disk image file into memory
+for diskette operations. In case of a raw  (1.44 MByte) floppy image, when ejecting the floppy
+or shutting down the machine, the complete floppy image file is overwritten if the floppy was modified
+(no delta file). Legacy IMD or DMK floppies are always mounted read-only and are not written
+back, as only reading IMD or DMK files is supported.
 
 - unlike Xerox machines, Dwarf is not a microcoded machine, so Dwarf can only execute the
 Mesa instructions; running Lisp or Smalltalk or Cedar environments (would these be available)
