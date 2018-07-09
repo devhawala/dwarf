@@ -56,9 +56,9 @@ Dwarf supports the following floppy formats:
 - raw format for 3.5" floppies as created by the original emulator on PCs
 
 The term "legacy floppy" means that the image was created from a floppy disk written by
-a 8010 (8" floppy) or a 6085 (5.25" floppy) workstation with a Pilot based OS XDE (4.0 or later)
-or ViewPoint (1.0 or later). Legacy floppy images are mounted in R/O mode, as changes
-cannot be written back into the original format (IMD or DMK).  
+a 8010 (8" floppy) or a 6085 (5.25" floppy) workstation with a Pilot based OS like XDE (4.0
+or later) or ViewPoint (1.0 or later). Legacy floppy images are mounted in R/O mode, as
+changes cannot be written back into the original format (IMD or DMK).  
 The disk content of the legacy floppy image is implanted in a template 3.5" image
 based on the XDE sector layout. This allows to read the legacy floppy content.
 
@@ -279,9 +279,11 @@ and disabled if the mesa engine is already running. The buttons should be self-e
 and display a hint when the mouse stays a while over them.
 
 The _Insert_ button opens the file selection dialog for the floppy image file to load.
-Virtual floppy files must have a size of 1440 KiB = 1.474.560 bytes to be accepted in the
+Virtual floppy files must have have an extension `.imd` or `.dmk` for loading a legacy
+floppy image or any extension but a size of 1440 KiB = 1.474.560 bytes to be accepted in the
 file selection dialog for "inserting" the floppy. If the _R/O_ checkbox is checked, the
 floppy will be loaded in read-only mode, rejecting any attempts to modify the diskette.
+Legacy floppy images are always forced to be loaded in read-only mode.  
 The _Eject_ button removes the floppy, overwriting the floppy image with the new
 content if the floppy was modified.  
 
@@ -403,7 +405,7 @@ documents about such "details" as:
 
 - interfacing the peripherals like screen, mouse, keyboard, disk etc.
 
-- undocumented instructions like VMFIND (essential for the Pilot-OS)
+- undocumented instructions like VMFIND (essential for the Pilot-OS) or COLORBLT
 
 - initialization sequence for loading and preparing the germ to bring a mesa engine in a runnable state
   as defined by PrincOps for the initial XFER.
