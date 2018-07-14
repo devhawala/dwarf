@@ -437,6 +437,21 @@ public class FloppyAgent extends Agent {
 		}
 		
 		protected void buildNewFloppy() throws IOException {
+			final String msg = "Invalid Xerox legacy floppy image (unknown geometry)";
+			if (this.dataSectors == 9) {
+				// 5.25" floppy
+				if (this.cyl0Sectors != 16 /*|| this.cylinders != 40*/) {
+					throw new IOException(msg);
+				}
+			} else if (this.dataSectors == 15) {
+				// 8" floppy
+				if (this.cyl0Sectors != 26 /*|| this.cylinders != 77*/) {
+					throw new IOException(msg);
+				}
+			} else {
+				throw new IOException(msg);
+			}
+			
 			this.loadTemplate();
 			this.implant();
 		}
@@ -497,10 +512,10 @@ public class FloppyAgent extends Agent {
 			int tocMaxEntries = w(tocSector,3);
 		
 			if (tocSeal != 0xB2CB) {
-				throw new IOException("IMD file does not contain a valid Xerox floppy TOC (invalid seal)");
+				throw new IOException("Legacy floppy file does not contain a valid Xerox floppy TOC (invalid seal)");
 			}
 			if (tocEntries > (this.tmplMaxTocEntries - 1)) {
-				throw new IOException("IMD file cannot be cloned (more than 144 files in TOC)");
+				throw new IOException("Legacy floppy file cannot be cloned (more than 144 files in TOC)");
 			}
 			
 			// ?? int diffLba = tocLba - this.tmplTocLba; // newLba <- oldLba - diffLba
@@ -579,7 +594,7 @@ public class FloppyAgent extends Agent {
 			 * copy link &  data blocks from old to template 
 			 */
 			logf("\n-- begin copying content\n");
-			int lastLba = this.dataSectors * this.cylinders * 2; // 2 heads
+			int lastLba = Math.min(this.dataSectors, w(9,4)) * Math.min(this.cylinders, w(9,2)) * 2; // 2 heads
 			int currLba = linklba + 1; // start with first data sector
 			int tmplCurrLba = tmplLinklba;
 			while(currLba <= lastLba) {
@@ -996,13 +1011,16 @@ public class FloppyAgent extends Agent {
 			int[] offsets = new int[64];
 			boolean[] isDD = new boolean[64];
 			int sectCount = 0;
+			logf("idams 0x :");
 			for (int i = 0; i < offsets.length; i++) {
 				int idam = this.readWord(bis);
+				logf(" %04X", idam);
 				isDD[i] = (idam & 0x8000) != 0; 
 				offsets[i] = (idam & 0x3FFF) - 0x80;
-				if (offsets[i] == 0) { continue; } // not used sector
+				if (offsets[i] <= 0) { continue; } // not used sector
 				sectCount++;
 			}
+			logf("\n");
 			
 			// read the sector contents
 			int trackLength = rawTrackLength - 0x80;
@@ -1018,9 +1036,37 @@ public class FloppyAgent extends Agent {
 				lastOffset = offsets[i];
 			}
 			
-			if (trackNo == 0) {
+			if (trackNo == 0 || trackNo == 1) {
+			
+				logf("offsets:");
+				for (int i = 0; i < sectCount; i++) {
+					logf(" %4d", offsets[i]);
+				}
+				logf("\n");
+				
+				logf("slength:");
+				for (int i = 0; i < sectCount; i++) {
+					logf(" %4d", rawSectLengths[i]);
+				}
+				logf("\n");
+				
+				if (sectCount != 16 && sectCount != 26) {
+					throw new IOException("Invalid Xerox legacy floppy image (unknown geometry)");
+				}
+	
+//				logf("raw track data: ");
+//				for (int idx = 0; idx < trackLength; idx++) {
+//					if ((idx % 32) == 0) { logf("\n  "); }
+//					logf(" %02X", sectorData[idx]);
+//				}
+//				logf("\n");
+			
+			}
+			
+			if (trackNo == 0 && sectorData[offsets[0]] == (byte)0xFE && sectorData[offsets[0]+1] == (byte)0xFE) {
 				// xerox disks have single density 128 bytes in first track => all bytes are doubled in DMK
 				// (ok, this is lazy, this info must be somehow in the metadata of the track or disk or ...)
+				logf("... de-doubling content\n");
 				for (int i = 0; i < trackLength/2; i++) {
 					sectorData[i] = sectorData[i*2]; 
 				}
@@ -1076,7 +1122,15 @@ public class FloppyAgent extends Agent {
 					int w = (b1 << 8) | b2;
 					sectContent[idx / 2] = (short)w;
 				}
+
 				this.sectors.add(sectContent); // TODO: make sure the position is correct should the sector sequence not be ascendent
+				
+				logf("sector words: ");
+				for (int idx = 0; idx < sectContent.length; idx++) {
+					if ((idx % 16) == 0) { logf("\n  "); }
+					logf(" %04X", sectContent[idx]);
+				}
+				logf("\n");
 				
 				// save the legacy metadata if necessary
 				if (i == 0) {
