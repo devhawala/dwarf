@@ -34,6 +34,8 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintStream;
+import java.io.RandomAccessFile;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,6 +44,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import dev.hawala.dmachine.engine.Config;
 import dev.hawala.dmachine.engine.Cpu;
@@ -369,6 +373,112 @@ public class DiskAgent extends Agent {
 		}
 		
 		/**
+		 * Write back the disk content overwriting the disk file without creating a detla,
+		 * after backing up the current disk file and all deltas in a ZIP archive and removing
+		 * now obsolete delta files. 
+		 * 
+		 * @param ps sink for writing messages.
+		 * @throws IOException
+		 */
+		public void mergeDelta(PrintStream ps) throws IOException {
+			// check for a delta
+			String deltaname = this.f.getPath() + ".zdelta";
+			File delta = new File(deltaname);
+			if (!delta.exists()) {
+				ps.printf("No delta found for disk '%s', nothing to merge\n", f.getName());
+				return;
+			}
+			
+			// copy the disk and delta files into an zip archive
+			File dir = this.f.getParentFile();
+			String filterFnStart = delta.getName() + "-";
+			File[] deltas = dir.listFiles(new FilenameFilter() {
+				
+				@Override
+				public boolean accept(File file, String fn) {
+					return fn.startsWith(filterFnStart);
+				}
+			});
+			SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd_HH.mm.ss.SSS");
+			String zipName = f.getPath() + "-" + sdf.format(new Date()) + ".zip";
+			ps.printf("Creating archive: %s\n", zipName);
+			try (FileOutputStream fos = new FileOutputStream(zipName); ZipOutputStream zos = new ZipOutputStream(fos)) {
+				addToZip(this.f, zos, ps);
+				for (File df : deltas) {	
+					addToZip(df, zos, ps);
+				}
+				addToZip(delta, zos, ps);
+			}
+			
+			// remove the deltas
+			delta.delete();
+			for (File df : deltas) {	
+				df.delete();
+			}
+			
+			// write back the full dsk
+			ps.printf("Merging delta into DSK\n");
+			int chunksWritten = 0;
+			int pagesWritten = 0;
+			try (RandomAccessFile raf = new RandomAccessFile(this.f.getAbsoluteFile(), "rw")) {
+				for (int chunkNo = 0; chunkNo < this.chunks.length; chunkNo++) {
+					if (this.chunks[chunkNo] != 0) {
+						short chunk = this.chunks[chunkNo];
+						chunksWritten++;
+						int chunkBaseOffset = chunkNo * PrincOpsDefs.WORDS_PER_PAGE * 16; // 16 pages in a chunk
+						int chunkOffset = 0;
+						for (int i = 0; i < 16; i++) {
+							if ((chunk & CHUNK_MODIFIED_BITS[i]) != 0) {
+								mergePage(raf, chunkBaseOffset + chunkOffset);
+								pagesWritten++;
+							}
+							chunkOffset += PrincOpsDefs.WORDS_PER_PAGE;
+						}	
+					}
+				}
+			}
+			ps.printf("Done (written %d pages from %d chunks)\n", pagesWritten, chunksWritten);
+		}
+		
+		private void mergePage(RandomAccessFile raf, int offset) throws IOException {
+			int byteOffset = offset * 2;
+			if (raf.getFilePointer() != byteOffset) {
+				raf.seek(byteOffset);
+			}
+			int limit = offset + PrincOpsDefs.WORDS_PER_PAGE;
+			for (int i = offset; i < limit; i++) {
+				short w = this.content[i];
+				if (this.externalByteSwapped) {
+					// little endian: 1st lower byte, then upper byte
+					raf.write(w & 0xFF);
+					raf.write((w >> 8) & 0xFF);
+				} else {
+					// big endian: 1st lower byte, then upper byte
+					raf.write((w >> 8) & 0xFF);
+					raf.write(w & 0xFF);
+				}
+			}
+		}
+		
+		private void addToZip(File file, ZipOutputStream zos, PrintStream ps) throws FileNotFoundException, IOException {
+			ps.printf("... adding: %s\n", file.getName());
+			
+			ZipEntry zipEntry = new ZipEntry(file.getName());
+			zos.putNextEntry(zipEntry);
+
+			try (FileInputStream fis = new FileInputStream(file)) {
+				byte[] buffer= new byte[1024];
+				int length = fis.read(buffer);
+				while (length >= 0) {
+					zos.write(buffer, 0, length);
+					length = fis.read(buffer);
+				}
+			}
+
+			zos.closeEntry();
+		}
+		
+		/**
 		 * @return the number of simulated cylinders for the disk.
 		 */
 		public int getCylinders() {
@@ -580,6 +690,18 @@ public class DiskAgent extends Agent {
 					+ "\n"
 					+ e.getClass() + ": " + e.getMessage());
 			return null; // keep the compiler happy, does not know that Cpu.ERROR does not return...
+		}
+	}
+	
+	public static final void mergeDisks(PrintStream ps) {
+		for (DiskFile df : diskFiles) {
+			ps.printf("Merging disk: %s\n", df.f.getName());
+			try {
+				df.mergeDelta(ps);
+				ps.printf("Done merging disk: %s\n", df.f.getName());
+			} catch(IOException e) {
+				ps.printf("!! failed, due to: %s\n", e.getMessage());
+			}
 		}
 	}
 	

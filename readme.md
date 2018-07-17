@@ -256,9 +256,20 @@ if possible the symbol name corresponding to that key; any of these values
 can be used in a keyboard mapping file.  
 _optional_
 
-Example:
+- `-merge`  
+instead of running the mesa emulator, merge the current delta for the boot disk into
+the harddisk image file; the current disk file, the delta and all backup deltas are
+archived into a zip file (named after the disk file and the current timestamp) and all
+delta files are deleted before doing the merge.  
+_optional_ (as alternative to running the mesa engine) 
 
-`java -jar dwarf.jar dawn -run`
+Examples:
+
+`java -jar dwarf.jar dawn -run`  
+(run the virtual xerox machine configured in the file `dawn.properties`)
+
+`java -jar dwarf.jar dawn -merge`  
+(merge the delta into the disk file for virtual xerox machine configured in the file `dawn.properties`)
 
 #### Running a Dwarf machine
 
@@ -335,7 +346,10 @@ Stopping Dwarf externally using the host OS means (Ctrl-C in the shell running t
 so changes will be lost.
 
 Warning: unlike other emulators, Dwarf does not overwrite the original virtual harddisk
-file, but saves changes in (compressed) delta files. This means that
+file, but saves changes in (compressed) delta files. This means that the delta must first
+be included in the harddisk image file (using the `-merge` command line parameter)
+before the harddisk file is used with an other emulator.  
+Not merging the delta has the following effects:
 
 - when running an other emulator with the virtual harddisk, the changes made in Dwarf
   boot sessions will not be visible, as Dwarf leaves the original file unchanged

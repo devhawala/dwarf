@@ -32,6 +32,7 @@ import java.awt.event.FocusListener;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
@@ -307,6 +308,7 @@ public class Dwarf {
 		
 		boolean testOnly = false;
 		boolean logKeyPressed = false;
+		boolean doMerge = false;
 		String cfgFile = null;
 		
 		// command line parameters pass 1: check for test only OR run configuration
@@ -343,6 +345,8 @@ public class Dwarf {
 						dumpConfig = true;
 					} else if ("-logkeypressed".equalsIgnoreCase(arg)) {
 						logKeyPressed = true;
+					} else if ("-merge".equalsIgnoreCase(arg)) {
+						doMerge = true;
 					} else {
 						System.out.printf("Warning: ignoring unknown command line argument: %s\n", arg);
 					}
@@ -351,6 +355,20 @@ public class Dwarf {
 			if (dumpConfig) { 
 				dumpConfiguration();
 			}
+		}
+		
+		// merge disks of requested, doing nothing else afterwards
+		if (doMerge) {
+			PrintStream ps = System.out;
+			DiskState diskState = DiskAgent.addFile(bootFile, false, oldDeltasToKeep);
+			if (diskState == DiskState.ReadOnly) {
+				ps.printf("Bootdisk '%s' is readonly and cannot be merged, aborting!\n", bootFile);
+			} else if (diskState == DiskState.Corrupted) {
+				ps.printf("Bootdisk '%s' has corrupted delta and cannot be merged, aborting!\n", bootFile);
+			} else {
+				DiskAgent.mergeDisks(ps);
+			}
+			return;
 		}
 		
 		// setup the mesa machine to get the callbacks for the ui to the mesa machine
