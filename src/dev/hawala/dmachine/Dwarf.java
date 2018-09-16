@@ -61,6 +61,7 @@ import dev.hawala.dmachine.engine.iUiDataConsumer;
 import dev.hawala.dmachine.engine.agents.Agents;
 import dev.hawala.dmachine.engine.agents.DiskAgent;
 import dev.hawala.dmachine.engine.agents.DiskState;
+import dev.hawala.dmachine.engine.agents.NetworkAgent;
 
 /**
  * Dwarf application main program, loading the configuration for the
@@ -111,6 +112,9 @@ public class Dwarf {
 	private static String keyboardMapFile = null;
 	private static int xeroxControlKeyCode = eKeyEventCode.VK_CONTROL.getCode();
 	private static boolean resetKeysOnFocusLost = true;
+	private static String netHubHost = "";
+	private static int netHubPort = 3333;
+	private static int localTimeOffsetMinutes = 0;
 	
 	// control flags for the mesa engine
 	private static boolean doStartEngine = false;
@@ -247,6 +251,9 @@ public class Dwarf {
 		floppyDirectory = props.getString("floppyDirectory", floppyDirectory);
 		keyboardMapFile = props.getString("keyboardMapFile", keyboardMapFile);
 		doStartEngine = props.getBoolean("autostart", doStartEngine);
+		netHubHost = props.getString("netHubHost", netHubHost);
+		netHubPort = props.getInt("netHubPort", netHubPort);
+		localTimeOffsetMinutes = props.getInt("localTimeOffsetMinutes", localTimeOffsetMinutes);
 		
 		String ctrlKeyCode = props.getString("xeroxControlKeyCode", null);
 		if (ctrlKeyCode != null && ctrlKeyCode.length() > 0) {
@@ -301,6 +308,9 @@ public class Dwarf {
 		System.out.printf(" autostart   : %s\n", (doStartEngine) ? "yes" : "no");
 		System.out.printf(" floppy      : %s\n", (initialFloppy != null) ? initialFloppy : "");
 		System.out.printf(" floppy dir  : %s\n", (floppyDirectory != null) ? floppyDirectory : "");
+		System.out.printf(" netHubHost  : %s\n", netHubHost);
+		System.out.printf(" netHubPort  : %d\n", netHubPort);
+		System.out.printf(" localTimeOff: %d\n", localTimeOffsetMinutes);
 	}
 	
 	// the main program
@@ -401,6 +411,7 @@ public class Dwarf {
 			} else if (diskState == DiskState.Corrupted) {
 				title += " [ CORRUPTED ; don't use this disk delta ]";
 			}
+			NetworkAgent.setHubParameters(netHubHost, netHubPort, localTimeOffsetMinutes);
 			Agents.initialize();
 			
 			// perform the initial microcode pre-boot actions (simulating the IOP on a 8000/6085)

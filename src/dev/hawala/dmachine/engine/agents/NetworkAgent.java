@@ -26,6 +26,9 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.dmachine.engine.agents;
 
+import java.util.LinkedList;
+import java.util.Queue;
+
 import dev.hawala.dmachine.engine.Config;
 import dev.hawala.dmachine.engine.Cpu;
 import dev.hawala.dmachine.engine.Mem;
@@ -35,13 +38,11 @@ import dev.hawala.dmachine.engine.Processes;
 /**
  * Agent for the network interface of a Dwarf machine,
  * 
- * Network access is currently not supported, this agent mainly
- * logs and discards packets that the mesa engine wants to send, 
- * confirming to the mesa engine that the packets were successfully
- * transmitted. No packets can be received, as there is no connection
- * to any network. 
+ * Network access is supported to the Dodo NetHub or
+ * as fallback to an internal time service, depending on
+ * the configuration of the network agent.  
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2017)
+ * @author Dr. Hans-Walter Latz / Berlin (2017,2018)
  */
 public class NetworkAgent extends Agent {
 	
@@ -87,75 +88,289 @@ public class NetworkAgent extends Agent {
 	// other constants for network
 	private static final int MaxPacketSize = 1536; // max. ethernet packet size, XNS uses max. 576 bytes = 546 payload + 30 header
 	
+	// configuration parameters
+	private static String hubHostname = "";
+	private static int hubPort = 0;
+	private static int localTimeOffsetMinutes = 0;
+	
+	// the network device the agent is connected to
+	private iNetDeviceInterface netIf = null;
+	
+	// packet receiving status
+	private boolean receiveStopped = true; // is receiving packets stopped and are all incoming packets to be dropped?
+	
+	// list of IOCB addresses ready to receive packets
+	private final Queue<Integer> receiveIocbs = new LinkedList<>();
+	
+	// temp buffer for word <-> byte conversion of packets
+	private final byte[] packetBuffer = new byte[2048];
+	
+	/**
+	 * Configure the (next created instance of the) agent with connection data
+	 * to the NetHub or as backup the internal (local) time service parameters. 
+	 * 
+	 * @param hostname
+	 * 		the name of the NetHub host
+	 * 		(or {@code null} or empty string for no NetHub connection)
+	 * @param port
+	 * 		the port where the NetHub is listening 
+	 * 		(or {@code 0} (zero) for no NetHub connection)
+	 * @param fallbackLocalTimeOffsetMinutes
+	 * 		if no NetHub is used: difference between local time and GMT in
+	 * 		minutes, with positive values being to the east and negative
+	 * 		to the west (e.g. Germany is +60 without DST and +120 with DST
+	 * 		whereas Alaska should be -560 without DST resp -480 with DST).
+	 */
+	public static void setHubParameters(String hostname, int port, int fallbackLocalTimeOffsetMinutes) {
+		hubHostname = hostname;
+		hubPort = port;
+		localTimeOffsetMinutes = fallbackLocalTimeOffsetMinutes;
+	}
+	
+//	private static class InterruptThrottler implements Runnable {
+//		
+//		public static final int NO_INTERRUPTS = -123456;
+//		
+//		private final int waitInterval; // milliseconds
+//		
+//		private final List<Runnable> pendingInterruptRaisers = new ArrayList<>();
+//		private Runnable nextRaiser = null;
+//		private long nextTs = never();
+//		
+//		public InterruptThrottler(int interval) {
+//			this.waitInterval = interval;
+//		}
+//		
+//		private static long never() {
+//			return System.currentTimeMillis() + (28 * 86400000L); // now + 4 weeks 
+//		}
+//		
+//		public Runnable getNextRaiser() {
+//			if (this.waitInterval <= 0) {
+//				return null;
+//			}
+//			synchronized(this) {
+//				if (System.currentTimeMillis() < this.nextTs) {
+//					return null;
+//				}
+//				Runnable result = this.nextRaiser;
+//				this.nextRaiser = null;
+//				this.nextTs = never();
+//				return result;
+//			}
+//		}
+//		
+//		public void addRaiser(Runnable raiser) {
+//			if (this.waitInterval == NO_INTERRUPTS) {
+//				return;
+//			}
+//			if (this.waitInterval <= 0) {
+//				raiser.run();
+//				return;
+//			}
+//			synchronized(this) {
+//				this.pendingInterruptRaisers.add(raiser);
+//			}
+//		}
+//		
+//		public void reset() {
+//			synchronized(this) {
+//				this.pendingInterruptRaisers.clear();
+//				this.nextRaiser = null;
+//				this.nextTs = never();
+//			}
+//		}
+//		
+//		@Override
+//		public void run() {
+//			if (this.waitInterval <= 0) {
+//				return;
+//			}
+//			try {
+//				synchronized(this) {
+//					while(true) {
+//						this.wait(waitInterval);
+//						if (this.nextRaiser != null) {
+//							Processes.requestDataRefresh();
+//						} else if (!this.pendingInterruptRaisers.isEmpty()) {
+//							this.nextRaiser = this.pendingInterruptRaisers.remove(0);
+//							this.nextTs = System.currentTimeMillis() + waitInterval;
+//						}
+//					}
+//				}
+//			} catch (InterruptedException e) {
+//				return;
+//			}
+//		} 
+//	}
+	
+//	private final InterruptThrottler interruptThrottler = new InterruptThrottler(0);
+//	private Thread throttlerThread = null;
+	
 	public NetworkAgent(int fcbAddress) {
 		super(AgentDevice.networkAgent, fcbAddress, FCB_SIZE);
 		this.enableLogging(Config.AGENTS_LOG_NETWORK);
-		// TODO: connect to network
+		
+		if (hubHostname != null && !hubHostname.isEmpty()
+			&& hubPort > 0 && hubPort < 0xFFFF) {
+			this.netIf = new NetworkHubInterface(hubHostname, hubPort);
+		} else {
+			this.netIf = new NetworkInternalTimeService(localTimeOffsetMinutes);
+		}
+		this.netIf.setNewPacketNotifier(() -> {
+			logf("\n+++ requesting datarefresh for new packet (at: %s , insns = %d)\n", 
+					getNanoMs(), Cpu.insns);
+			Processes.requestDataRefresh();
+		});
+		
+//		this.throttlerThread = new Thread(this.interruptThrottler);
+//		this.throttlerThread.setName("InterruptThrottler");
+//		this.throttlerThread.setDaemon(true);
+//		this.throttlerThread.start();
 	}
 	
 	@Override
 	public void shutdown(StringBuilder errMsgTarget) {
-		// TODO: disconnect from network
+		if (this.netIf != null) {
+			this.netIf.shutdown();
+			this.netIf = null;
+		}
+//		if (this.throttlerThread != null) {
+//			this.throttlerThread.interrupt();
+//			this.throttlerThread = null;
+//		}
 	}
-	
-	// temp data for "receiving" the time server response (simulation of a network)
-	private int tmpRecvIocb = 0; 
-	private short tmpRecvIntr = 0;
-	private int tmpRecvBuffer = 0;
-	private int tmpRecvBuflen = 0;
-	private int tmpDequeuedPacketTypeBits = 0;
-	private short[] tmpRecvData = null; 
 	
 	@Override
 	public void refreshMesaMemory() {
-		// TODO: copy packets received so far to mesa memory and raise interrupt (redesign?)
+		boolean logIntro = true;
 		
-		// receive a time server response packet if available 
-		if (tmpRecvData != null && tmpRecvIocb != 0) {
-			int wlen = Math.min(tmpRecvData.length, tmpRecvBuflen / 2);
-			int status = (wlen == tmpRecvData.length) ? S_completedOK : S_packetTooLong;
+		// no network => nothing to do...
+		if (this.netIf == null) { return; }
+		
+		// raise next interrupt if available
+//		Runnable intrRaiser = this.interruptThrottler.getNextRaiser();
+//		if (intrRaiser != null) {
+//			logIntro = this.logTimeIntro();
+//			logf("refreshMesaMemory()\n");
+//			
+//			intrRaiser.run();
+//		}
+		
+		// did Pilot stop packet transmission?
+		if (this.receiveStopped) {
+			// drain incoming packets
+			while(this.netIf.dequeuePacket(this.packetBuffer, this.packetBuffer.length) > 0) {
+				// ignore packet content
+			}
+		}
+		
+		// receive ingone packets into waiting iocbs
+		boolean didInterrupt = false;
+		while(!this.receiveIocbs.isEmpty()) {
+			int packetByteCount = this.netIf.dequeuePacket(this.packetBuffer, this.packetBuffer.length);
+			if (packetByteCount < 1) { return; }
 			
-			logf("\n## ## enqueueing temp packet\n\n");
-			
-			for (int i = 0; i < wlen; i++) {
-				Mem.writeWord(tmpRecvBuffer + i, tmpRecvData[i]);
+			if (logIntro) {
+				logIntro = this.logTimeIntro();
+				logf("begin refreshMesaMemory()\n");
 			}
 			
-			Mem.writeWord(tmpRecvIocb + iocb_w_actualLength, (short)(wlen * 2));
-			Mem.writeWord(tmpRecvIocb + iocb_w_dequeuedPacketTypeStatus, (short)(tmpDequeuedPacketTypeBits | status));
-			Processes.requestMesaInterrupt(tmpRecvIntr);
+			int recvIocb = this.dequeueReceiveIocb();
+			
+			int bufferAddress = Mem.readDblWord(recvIocb + iocb_lp_bufferAddress);
+			int bufferByteLength = Mem.readWord(recvIocb + iocb_w_bufferLength);
+			
+			int trfBytes = Math.min(packetByteCount, bufferByteLength);
+			int wlen = 0;
+			logf("\n -- raw packet data\n");
+			for(int i = 0; i < trfBytes; i += 2) {
+				if ((i % 32) == 0) { slogf("\n 0x%03X : ", i); }
+				int b1 = ((this.packetBuffer[i] & 0x00FF) << 8);
+				int b2 = this.packetBuffer[i+1] & 0x00FF;
+				short w = (short)(b1 | b2);
+				slogf(" %04X", w);
+				Mem.writeWord(bufferAddress + wlen, w);
+				wlen++;
+			}
+			slogf("\n\n");
+			Mem.writeWord(recvIocb + iocb_w_actualLength, (short)(wlen * 2));
+			
+			int status = (trfBytes == packetByteCount) ? S_completedOK : S_packetTooLong;
+			int packetTypeBits = Mem.readWord(recvIocb + iocb_w_dequeuedPacketTypeStatus) & 0x0000FF00;
+			Mem.writeWord(recvIocb + iocb_w_dequeuedPacketTypeStatus, (short)(packetTypeBits | status));
+			
+			dumpIocb(recvIocb, true);
+			slogf("\n");
 			
 			this.packetsReceived++;
+			logf("     transfered %d words (trfBytes %d, bufferLen %d) to Mesa memory at 0x%08X => status = %d\n", wlen, trfBytes, bufferByteLength, bufferAddress, status);
 			
-			tmpRecvData = null;
-			tmpRecvIocb = 0;
-			tmpRecvBuffer = 0;
-			tmpRecvBuflen = 0;
-			tmpRecvIntr = 0;
-			tmpDequeuedPacketTypeBits = 0;
+//			logf("registering interrupt raiser for recvIocb 0x%08X to throttler\n", recvIocb);
+//			String registerTs = getNanoMs();
+//			this.interruptThrottler.addRaiser(() -> {
+//				int packetTypeBits = Mem.readWord(recvIocb + iocb_w_dequeuedPacketTypeStatus) & 0x0000FF00;
+//				Mem.writeWord(recvIocb + iocb_w_dequeuedPacketTypeStatus, (short)(packetTypeBits | status));
+//				
+//				short recvIntrMask = this.getFcbWord(fcb_w_receiveInterruptSelector);
+//				Processes.requestMesaInterrupt(recvIntrMask);
+//				logf("+++++  at %s (registered: %s) :: requested MesaInterrupt(0x%04X) for recvIocb 0x%08X\n",
+//						getNanoMs(), registerTs, recvIntrMask, recvIocb);
+//			});
+			
+			if (!didInterrupt) {
+				short recvIntrMask = this.getFcbWord(fcb_w_receiveInterruptSelector);
+				Processes.requestMesaInterrupt(recvIntrMask);
+				didInterrupt = true;
+				logf("     requested MesaInterrupt(0x%04X)\n", recvIntrMask);
+//				Cpu.out.printf("####################  requested MesaInterrupt(0x%04X)\n", recvIntrMask);
+			}
+		}
+		if (!logIntro) {
+			logf("done refreshMesaMemory()\n");
 		}
 	}
 	
 	private int packetsSent = 0;
-	
 	private int packetsReceived = 0;
 	
 	public int getPacketsSentCount() { return this.packetsSent; }
 	
 	public int getPacketsReceivedCount() { return this.packetsReceived; }
-
+	
 	@Override
 	public void call() {
+		this.logTimeIntro();
 		boolean stop = (this.getFcbWord(fcb_w_stopAgent) != PrincOpsDefs.FALSE);
 		if (stop) {
+			logf("call() - stop transmissions\n");
+			
 			// stop transmissions
 			this.setFcbWord(fcb_w_receiveStopped, PrincOpsDefs.TRUE);
 			this.setFcbWord(fcb_w_transmitStopped, PrincOpsDefs.TRUE);
+			this.receiveStopped = true;
+			
+			// drop pending packets in network interface, iocb queue and interrupt queue
+			// drain incoming packets
+			if (this.netIf != null) {
+				while(this.netIf.dequeuePacket(this.packetBuffer, this.packetBuffer.length) > 0) {
+					// ignore packets dropped
+				}
+			}
+			this.receiveIocbs.clear();
+//			this.interruptThrottler.reset();
+			logf("call() - end\n");
+			
 			return; // nothing to else do if stopping transmissions
 		} else {
-			// start transmissions
+			// (re)tart transmissions
 			this.setFcbWord(fcb_w_receiveStopped, PrincOpsDefs.FALSE);
 			this.setFcbWord(fcb_w_transmitStopped, PrincOpsDefs.FALSE);
+			if (this.receiveStopped) {
+				this.receiveIocbs.clear();
+				logf("call() - (re)starting transmissions\n");
+			}
+			this.receiveStopped = false;
 		}
 		
 		short receiveInterruptSelector = this.getFcbWord(fcb_w_receiveInterruptSelector);
@@ -166,40 +381,20 @@ public class NetworkAgent extends Agent {
 		int recvIocb = this.getFcbDblWord(fcb_lp_receiveIOCB);
 		int sendIocb = this.getFcbDblWord(fcb_lp_transmitIOCB);
 		
-		long nanoTs = System.nanoTime();
-		logf("\n\n--\n-- at %9d.%06d ms\n--\n", nanoTs / 1000000, nanoTs % 1000000);
-		
 		logf("call() - recvIocb = 0x%08X , sendIocb = 0x%08X , stopAgent = %s , hearSelf = %s\n",
 				recvIocb, sendIocb, (stop) ? "true" : "false", (hearSelf) ? "true" : "false");
 		logf("         recvIntr = 0x%04X , xmitIntr = 0x%04X\n",
 				receiveInterruptSelector & 0xFFFF, transmitInterruptSelector & 0xFFFF);
 		if (stop) { return; }
 		
-		// TODO *really* process transmission IOCBs
-		
-		tmpRecvIocb = 0;
-		tmpRecvBuffer = 0;
-		tmpRecvBuflen = 0;
-		tmpRecvIntr = 0;
-		tmpDequeuedPacketTypeBits = 0;
-		
 		int recvCnt = 0;
 		while(recvIocb != 0) {
 			int bufferAddress = Mem.readDblWord(recvIocb + iocb_lp_bufferAddress);
 			int bufferLength = Mem.readWord(recvIocb + iocb_w_bufferLength);
-			int oldDequeuedPacketTypeBits = Mem.readWord(recvIocb + iocb_w_dequeuedPacketTypeStatus) & 0x0000FF00;
 			logf("         recvIocb[%d] :: recvIocb = 0x%08X , bufferAddress = 0x%08X , bufferLength = %d\n",
 					recvCnt, recvIocb, bufferAddress, bufferLength);
 			
-			Mem.writeWord(recvIocb + iocb_w_dequeuedPacketTypeStatus, (short)(oldDequeuedPacketTypeBits | S_inProgress));
-			
-			if (recvCnt == 0) {
-				tmpRecvIocb = recvIocb;
-				tmpRecvBuffer = bufferAddress;
-				tmpRecvBuflen = bufferLength;
-				tmpRecvIntr = receiveInterruptSelector;
-				tmpDequeuedPacketTypeBits = oldDequeuedPacketTypeBits;
-			}
+			this.enqueueReceiveIocb(recvIocb);
 			
 			recvCnt++;
 			recvIocb = Mem.readDblWord(recvIocb + iocb_lp_nextIocb);
@@ -210,43 +405,56 @@ public class NetworkAgent extends Agent {
 			int bufferAddress = Mem.readDblWord(sendIocb + iocb_lp_bufferAddress);
 			int bufferLength = Mem.readWord(sendIocb + iocb_w_bufferLength);
 			int actualLength = Mem.readWord(sendIocb + iocb_w_actualLength);
-			int oldDequeuedPacketTypeBits = Mem.readWord(sendIocb + iocb_w_dequeuedPacketTypeStatus) & 0x0000FF00;
 			
 			logf("         sendIocb[%d] :: sendIocb = 0x%08X , bufferAddress = 0x%08X , bufferLength = %d , actualLength = %d\n",
 					sendCnt, sendIocb, bufferAddress, bufferLength, actualLength);
 			
 			doTransmitInterrupt = true; // we have something to handle for transmission, so inform about the outcome
 			
-			int status = S_inProgress;
-			if (bufferAddress == 0 || bufferLength < 1) {
+			final int status;
+			if (bufferAddress == 0 || bufferLength < NetworkHubInterface.MIN_NET_PACKET_LEN) {
 				status = S_badCRC;
-			} else if (bufferLength > MaxPacketSize) {
+			} else if (bufferLength > Math.min(NetworkHubInterface.MAX_NET_PACKET_LEN, MaxPacketSize)) {
 				status = S_packetTooLong;
-//			} else if (transmission failed) {
-//				status = S_badCRC; // S_tooManyCollisions ??
+			} else if (this.netIf == null) {
+				status = S_badCRC; // S_tooManyCollisions ??
 			} else {
-				status = S_completedOK;
+				int bpos = 0;
+				for (int i = 0; i < (bufferLength + 1)/2; i++) {
+					short w = Mem.readWord(bufferAddress + i);
+					this.packetBuffer[bpos++] = (byte)(w >>> 8);
+					this.packetBuffer[bpos++] = (byte)(w & 0xFF);
+				}
+				int trfLength = this.netIf.enqueuePacket(this.packetBuffer, bufferLength, hearSelf);
+				status = (trfLength == bufferLength) ? S_completedOK : S_packetTooLong;
 				packetsSent++;
-				Mem.writeWord(sendIocb + iocb_w_actualLength, (short)bufferLength);
-				Mem.writeWord(sendIocb + iocb_w_retries, (short)0); // the packet was sent on the 1st try 
+				Mem.writeWord(sendIocb + iocb_w_actualLength, (short)trfLength);
+				Mem.writeWord(sendIocb + iocb_w_retries, (short)0); // the packet was sent on the 1st try
 			}
+			int oldDequeuedPacketTypeBits = Mem.readWord(sendIocb + iocb_w_dequeuedPacketTypeStatus) & 0x0000FF00;
 			Mem.writeWord(sendIocb + iocb_w_dequeuedPacketTypeStatus, (short)(oldDequeuedPacketTypeBits | status));
 			
-			if (status == S_completedOK) {
-//				logf("          => packet content:");
-//				for (int i = 0; i < (bufferLength + 1)/2; i++) {
-//					if ((i % 16) == 0) {
-//						slogf("\n              0x%03X :", i);
-//					}
-//					slogf(" %04X", Mem.readWord(bufferAddress + i));
-//				}
-//				slogf("\n");
-				dumpPacket(bufferAddress, bufferLength);
-			} else {
-				logf("          => packet not transmittable\n");
-			}
+//			logf("registering interrupt raiser for sendIocb 0x%08X to throttler\n", sendIocb);
+//			int iocbStatus = status;
+//			int intrIocb = sendIocb;
+//			String registerTs = getNanoMs();
+//			this.interruptThrottler.addRaiser(() -> {
+//				int oldDequeuedPacketTypeBits = Mem.readWord(intrIocb + iocb_w_dequeuedPacketTypeStatus) & 0x0000FF00;
+//				Mem.writeWord(intrIocb + iocb_w_dequeuedPacketTypeStatus, (short)(oldDequeuedPacketTypeBits | iocbStatus));
+//
+//				short xmitIntrMask = this.getFcbWord(fcb_w_transmitInterruptSelector);
+//				Processes.requestMesaInterrupt(transmitInterruptSelector);
+//				logf("+++++ at %s (registered: %s) :: requested MesaInterrupt(0x%04X) for sendIocb 0x%04X\n",
+//						getNanoMs(), registerTs, xmitIntrMask, intrIocb);
+//			});
 			
-			// TODO: if hearSelf => enqueue this packet into receive queue
+			dumpIocb(sendIocb);
+			
+			if (status == S_completedOK) {
+				logf("          => packet [%d] transmitted, length: %d\n", packetsSent, bufferLength);
+			} else {
+				logf("          => packet not transmitted or transmittable\n");
+			}
 			
 			sendCnt++;
 			sendIocb = Mem.readDblWord(sendIocb + iocb_lp_nextIocb);
@@ -254,228 +462,9 @@ public class NetworkAgent extends Agent {
 		
 		if (doTransmitInterrupt) {
 			Processes.requestMesaInterrupt(transmitInterruptSelector);
+			logf("     requested MesaInterrupt(0x%04X)\n", transmitInterruptSelector);
 		}
-	}
-	
-	private void dumpPacket(int buffer, int length) {
-		logf("\n          => raw packet content:");
-		for (int i = 0; i < (length + 1)/2; i++) {
-			if ((i % 16) == 0) {
-				slogf("\n              0x%03X :", i);
-			}
-			slogf(" %04X", Mem.readWord(buffer + i));
-		}
-		slogf("\n");
-		
-		if (length < 7) { return; }
-		
-		logf("\n          => ethernet packet header\n");
-		dumpNetAddress("dst-addr", Mem.readWord(buffer + 0), Mem.readWord(buffer + 1), Mem.readWord(buffer + 2));
-		dumpNetAddress("src-addr", Mem.readWord(buffer + 3), Mem.readWord(buffer + 4), Mem.readWord(buffer + 5));
-		short etherType = Mem.readWord(buffer + 6);
-		slogf("              ethType  : 0x%04X (%s)\n", etherType, (etherType == 0x0600) ? "xns" : "other" );
-		
-		if (etherType != 0x0600) { return; }
-		
-		logf("\n          => xns packet header\n");
-		int pByteLen = Mem.readWord(buffer + 8) & 0xFFFF;
-		int pWordLen = (pByteLen + 1) /2;
-		slogf("              ckSum   : 0x%04X\n", Mem.readWord(buffer + 7));
-		slogf("              length  : %d bytes => %d words\n", pByteLen, pWordLen);
-		short ctlType = Mem.readWord(buffer + 9);
-		slogf("              transCtl: %d\n", ctlType >>> 8);
-		int ptype = ctlType & 0xFF;
-		String typeName = "?";
-		switch(ptype) {
-		case 1: typeName = "Rip"; break;
-		case 2: typeName = "Echo"; break;
-		case 3: typeName = "Error"; break;
-		case 4: typeName = "PEX"; break;
-		case 5: typeName = "SPP"; break;
-		case 9: typeName = "BootServerPacket"; break;
-		case 12: typeName = "PUP"; break;
-		default: typeName = "unknown";
-		}
-		slogf("              pktType : %d = %s\n", ptype, typeName);
-		dumpXnsEndpoint("destination",
-				Mem.readWord(buffer + 10),
-				Mem.readWord(buffer + 11),
-				Mem.readWord(buffer + 12),
-				Mem.readWord(buffer + 13),
-				Mem.readWord(buffer + 14),
-				Mem.readWord(buffer + 15));
-		dumpXnsEndpoint("source",
-				Mem.readWord(buffer + 16),
-				Mem.readWord(buffer + 17),
-				Mem.readWord(buffer + 18),
-				Mem.readWord(buffer + 19),
-				Mem.readWord(buffer + 20),
-				Mem.readWord(buffer + 21));
-		
-		if (ptype == 4) { // PEX
-			logf("\n          => PEX header\n");
-			slogf("              identif.  : %04X - %04X\n", Mem.readWord(buffer + 22), Mem.readWord(buffer + 23));
-			int ctype = Mem.readWord(buffer + 24);
-			String clientType;
-			switch(ctype) {
-			case 0: clientType = "unspecified"; break;
-			case 1: clientType = "time"; break;
-			case 2: clientType = "clearinghouse"; break;
-			case 8: clientType = "teledebug"; break;
-			default: clientType = "??";
-			}
-			slogf("              clientType: %d = %s\n", ctype, clientType);
-			boolean isTimeReq = dumpXnsBody(typeName, buffer, pByteLen, 3);
-			if (ctype == 1 && isTimeReq) {
-				logf(" ## creating timerequest response\n");
-				
-				// the raw packet
-				short[] b = new short[37];
-				
-				// address components
-				short myNet0 = 0x0044;
-				short myNet1 = 0x1122;
-				short myMac0 = 0x1000;
-				short myMac1 = 0x1A33;
-				short myMac2 = 0x3333;
-				short mySocket = 8;
-				short mac0 = Mem.readWord(buffer + 3);
-				short mac1 = Mem.readWord(buffer + 4);
-				short mac2 = Mem.readWord(buffer + 5);
-				
-				// time data
-				long unixTimeMillis = System.currentTimeMillis();
-				int  milliSecs = (int)(unixTimeMillis % 1000);
-				long unixTimeSecs = unixTimeMillis / 1000;
-				int mesaSecs = (int)((unixTimeSecs + (731 * 86400) + 2114294400) & 0x00000000FFFFFFFFL);
-				short mesaSecs0 = (short)(mesaSecs >>> 16);
-				short mesaSecs1 = (short)(mesaSecs & 0xFFFF);
-				
-				// build the packet component-wise
-				
-				// eth: dst
-				b[0] = mac0;
-				b[1] = mac1;
-				b[2] = mac2;
-				
-				// eth: src
-				b[3] = myMac0;
-				b[4] = myMac1;
-				b[5] = myMac2;
-				
-				// eth: type
-				b[6] = 0x0600;
-				
-				// xns: ckSum
-				b[7] = (short)0xFFFF; // no checksum
-				
-				// xns: length
-				b[8] = 60; // payload length
-				
-				// xns: transport control & packet type
-				b[9] = 4; // hop count = 0 & packet type = PEX
-				
-				// xns: destination endpoint: copy the source destination of the ingone packet
-				b[10] = Mem.readWord(buffer + 16);
-				b[11] = Mem.readWord(buffer + 17);
-				b[12] = Mem.readWord(buffer + 18);
-				b[13] = Mem.readWord(buffer + 19);
-				b[14] = Mem.readWord(buffer + 20);
-				b[15] = Mem.readWord(buffer + 21);
-				
-				// xns: source endpoint: put "our" address with the "local" net and "our" socket
-				b[16] = myNet0;
-				b[17] = myNet1;
-				b[18] = myMac0;
-				b[19] = myMac1;
-				b[20] = myMac2;
-				b[21] = mySocket;
-				
-				// pex: identification
-				b[22] = Mem.readWord(buffer + 22);
-				b[23] = Mem.readWord(buffer + 23);
-				
-				// pex: client type
-				b[24] = 1; // clientType "time"
-				
-				// payload: time response
-				b[25] = 2; // version(0): WORD -- TimeVersion = 2
-				b[26] = 2; // tsBody(1): SELECT type(1): PacketType FROM -- timeResponse = 2
-				b[27] = mesaSecs0; // time(2): WireLong -- computed time
-				b[28] = mesaSecs1;
-				b[29] = 1; // zoneS(4): System.WestEast -- east
-				b[30] = 1; // zoneH(5): [0..177B] -- +1 hour
-				b[31] = 0; // zoneM(6): [0..377B] -- +0 minutes
-				b[32] = 0; // beginDST(7): WORD -- no dst (temp)
-				b[33] = 0; // endDST(8): WORD -- no dst (temp)
-				b[34] = 1; // errorAccurate(9): BOOLEAN -- true
-				b[35] = 0; // absoluteError(10): WireLong]
-				b[36] = (short)((milliSecs > 500) ? 1000 - milliSecs : milliSecs); // no direction ?? (plus or minus)?
-				
-				// enqueue for "sending" back
-				tmpRecvData = b;
-			}
-		} else {
-			dumpXnsBody(typeName, buffer, pByteLen, 0);
-		}
-		
-	}
-	
-	private void dumpNetAddress(String prefix, short w0, short w1, short w2) {
-		slogf("              %s : %02X-%02X-%02X-%02X-%02X-%02X\n",
-			prefix, (w0 >>> 8) & 0xFF, w0 & 0xFF, (w1 >>> 8) & 0xFF, w1 & 0xFF, (w2 >>> 8) & 0xFF, w2 & 0xFF);
-	}
-	
-	private void dumpXnsEndpoint(String prefix, short w0, short w1, short w2, short w3, short w4, short w5) {
-		logf("\n          => xns %s\n", prefix);
-		slogf("              network : %04X-%04X\n", w0, w1);
-		dumpNetAddress("host   ", w2, w3, w4);
-		String socket = null;
-		switch(w5) {
-		case 1: socket = "routing"; break;
-		case 2: socket = "echo"; break;
-		case 3: socket = "error"; break;
-		case 4: socket = "envoy"; break;
-		case 5: socket = "courier"; break;
-		case 7: socket = "clearinghouse_old"; break;
-		case 8: socket = "time"; break;
-		case 10: socket = "boot"; break;
-		case 19: socket = "diag"; break;
-		case 20: socket = "clearinghouse -- Broadcast for servers / Clearinghouse"; break;
-		case 21: socket = "auth -- Broadcast for servers / Authentication"; break;
-		case 22: socket = "mail"; break;
-		case 23: socket = "net_exec"; break;
-		case 24: socket = "ws_info"; break;
-		case 28: socket = "binding"; break;
-		case 35: socket = "germ"; break;
-		case 48: socket = "teledebug"; break;
-		}
-		slogf("              socket  : %04X%s%s\n", w5, (socket == null) ? "" : " - ", (socket == null) ? "" : socket);
-	}
-	
-	private boolean dumpXnsBody(String prefix, int buffer, int byteLength, int xnsSkip) {
-		buffer += 22 + xnsSkip;
-		byteLength -= (15 + xnsSkip) * 2;
-		logf("\n          => xns %s payload ( bytes: %d => words: %d )", prefix, byteLength, (byteLength + 1) / 2);
-		short w = 0;
-		int b = 0;
-		boolean isTimeReq = (byteLength == 4);
-		for (int i = 0; i < byteLength; i++) {
-			if ((i % 2) == 0) {
-				w = Mem.readWord(buffer + (i / 2));
-				b = (w >> 8) & 0xFF;
-				if (i == 0 && w != 2) { isTimeReq = false; }
-				if (i == 2 && w != 1) { isTimeReq = false; }
-			} else {
-				b = w & 0xFF;
-			}
-			if ((i % 16) == 0) {
-				slogf("\n              0x%03X :", i);
-			}
-			slogf(" %02X", b);
-		}
-		slogf("\n");
-		return isTimeReq;
+		logf("call() - end\n");
 	}
 
 	@Override
@@ -493,6 +482,102 @@ public class NetworkAgent extends Agent {
 		this.setFcbWord(fcb_w_processorID2, Cpu.getPIDword(3));
 		this.setFcbWord(fcb_w_packetsMissed, 0);
 		this.setFcbWord(fcb_w_agentBlockSize, 0); // no agent specific space needed in IOCBs ... ?
+	}
+	
+
+	
+	private void enqueueReceiveIocb(int iocb) {
+		if (iocb == 0) { return; }
+		
+		if (!this.receiveIocbs.isEmpty()) {
+			int bufferAddress = Mem.readDblWord(iocb + iocb_lp_bufferAddress);
+			boolean doRemove = false;
+			for (int queued : this.receiveIocbs) {
+				int queuedAddress = Mem.readDblWord(queued + iocb_lp_bufferAddress);
+				if (queuedAddress == bufferAddress) {
+					doRemove = true;
+					break;
+				}
+			}
+			if (doRemove) {
+				logf("     ** removed iocb 0x%08X with same buffer address\n", iocb);
+				this.receiveIocbs.remove(Integer.valueOf(iocb));
+			}
+		}
+		
+		int packetTypeBits = Mem.readWord(iocb + iocb_w_dequeuedPacketTypeStatus) & 0x0000FF00;
+		Mem.writeWord(iocb + iocb_w_dequeuedPacketTypeStatus, (short)(packetTypeBits | S_inProgress));
+		
+		this.receiveIocbs.add(iocb);
+		
+		logf("     enqueued iocb 0x%08X\n", iocb);
+		dumpReceiveIocbs();
+	}
+	
+	private int dequeueReceiveIocb() {
+		if (this.receiveIocbs.isEmpty()) { return 0; }
+		
+		int currIocb = this.receiveIocbs.remove();
+		
+		logf("     dequeued iocb 0x%08X\n", currIocb);
+		dumpIocb(currIocb);
+		dumpReceiveIocbs();
+		
+		return currIocb;
+	}
+	
+	private static String getNanoMs() {
+		long nanoTs = System.nanoTime();
+		return String.format("%9d.%06d ms", nanoTs / 1000000, nanoTs % 1000000);
+	}
+	
+	// returns if log must be done
+	private boolean logTimeIntro() {
+		slogf("\n\n--\n-- at %s (insns: %d)\n--\n", getNanoMs(), Cpu.insns);
+		return false;
+	}	
+	
+	private void dumpIocb(int iocb) {
+		dumpIocb(iocb, false);
+	}
+	
+	private void dumpIocb(int iocb, boolean dumpBuffer) {
+		int bAddr = Mem.readDblWord(iocb);
+		int bLen = Mem.readWord(iocb + 2);
+		int actLen = Mem.readWord(iocb + 3);
+		int qtStatus = Mem.readWord(iocb + 4);
+		int retries = Mem.readWord(iocb + 5);
+		int nextIocb = Mem.readDblWord(iocb + 6);
+		String dequeued = ((qtStatus & Q_dequeued) != 0) ? "dequeue" : "queued";
+		String type = ((qtStatus & T_transmit) != 0) ? "transmit" : "receive";
+		String status = ((qtStatus & S_inProgress) != 0) ? " inProgress" : "";
+		status += ((qtStatus & S_completedOK) != 0) ? " completedOK" : "";
+		status += ((qtStatus & S_tooManyCollisions) != 0) ? " tooManyCollisions" : "";
+		status += ((qtStatus & S_badCRC) != 0) ? " badCRC" : "";
+		status += ((qtStatus & S_alignmentError) != 0) ? " alignmentError" : "";
+		status += ((qtStatus & S_packetTooLong) != 0) ? " packetTooLong" : "";
+		status += ((qtStatus & 64) != 0) ? " d64" : "";
+		status += ((qtStatus & S_badCRDAndAlignmentError) != 0) ? " badCRDAndAlignmentError" : "";
+		
+		slogf("-> IOCB @ 0x%08X [ bAddr = 0x%08X , bLen = %4d , actLen = %4d , qts = 0x%04X , retries = %4d , nextIocb = 0x%08X ; ( %s %s%s ) ]\n",
+			iocb, bAddr, bLen, actLen, qtStatus, retries, nextIocb, dequeued, type, status);
+		if (dumpBuffer) {
+			int wlen = (actLen + 1) / 2; 
+			for(int i = 0; i < wlen; i++) {
+				if ((i % 16) == 0) { slogf("\n 0x%03X : ", i); }
+				int w = Mem.readWord(bAddr + i) & 0xFFFF;
+				slogf(" %04X", w);
+			}
+			slogf("\n");
+		}
+	}
+	
+	private void dumpReceiveIocbs() {
+		logf("     receive iocb queue now:\n");
+		for (int iocb : receiveIocbs) {
+			dumpIocb(iocb);
+		}
+		logf("     -----------------------\n");
 	}
 
 }

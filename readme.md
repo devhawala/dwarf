@@ -47,6 +47,8 @@ like Dandelion (8000 system) or Dove (6085 system):
 
 - one floppy drive (1.44 MByte raw or legacy IMD/DMK floppies, changeable at runtime)
 
+- network device, interfacing to a Dodo NetHub or as fallback to an internal time service
+
 Dwarf supports the following floppy formats:
 
 - IMD for legacy floppies if the file extension is `.imd` (case-insensitive)
@@ -84,10 +86,10 @@ back, as only reading IMD or DMK files is supported.
 Mesa instructions; running Lisp or Smalltalk or Cedar environments (would these be available)
 by loading a different microcode is not possible.
 
-- although no network access is currently supported, the network agent intercepts time server
-queries and simulates the reception of a time server response with the local time (however
-hard-coded to CET without daylight savings); this speeds up booting a little (MP code 0937
-is almost invisible) and lets XDE use central european time instead of californian time.  
+- Dwarf supports networking by connecting to a Dodo NetHub, allowing to interact with
+network elements connected to the same NetHub, these can be other emulated Xerox machines,
+a Dodo server providing XNS services or a "real" network with the NetHubGateway (see
+[Dodo Services - XNS with Java](https://github.com/devhawala/dodo)).
 
 ### Running Dwarf
 
@@ -102,7 +104,7 @@ from the github repository, unzip the package, done (more or less).
 The archive `dist.zip` contains a runnable jar `dwarf.jar` and the default keyboard mapping
 file, as well as sample configuration and shell script files for running XDE (Dawn) and
 GlobalView (GVWin) environments.    
-Copy your disk and germ files for the environments into the corresponding directoriesand if
+Copy your disk and germ files for the environments into the corresponding directories and if
 necessary adapt the filenames in respective configuration file.
 
 Hint: the disk or floppy files should not reside in the same directory as the `dwarf.jar` file,
@@ -170,6 +172,8 @@ _optional, default_: `true`
 
 - `processorId`    
 the processor or machine id for the Dwarf machine (or MAC address in todays wording)  
+(if networking is used, it should be ensured that **all** machines on the network
+have an unique processor id, or Pilot-based machines will stop by entering 0915 state)    
 _optional, default_: `00-1D-BA-AE-04-C3`
 
 - `title`  
@@ -191,6 +195,23 @@ _optional, no default_ (no floppy initially loaded)
 the directory-name to use as starting point in the file selection dialog
 for the _insert floppy_ function  
 _optional, no default_ (platform dependent, probably the home directory)
+
+- `netHubHost`    
+the name of the NetHub host to connect to or empty if no NetHub connection
+is to be used    
+_optional, default_: _empty_ (i.e. no NetHub connection = no networking)
+
+- `netHubPort`    
+the port where the NetHub is listening (must be in range 1..65535) or
+any invalid port number (e.g. `0`) for no NetHub connection      
+_optional, default_: 3333
+
+- `localTimeOffsetMinutes`    
+time zone parameter for the internal time service if no NetHub is used:
+difference between local time and GMT in minutes, with positive values being
+to the east and negative to the west (e.g. Germany is 60 without DST and 120
+with DST, whereas Alaska should be -560 without DST resp -480 with DST)    
+_optional, default_: 0 (i.e. GMT)
 
 - `autostart`  
 the boolean value `true`lets the machine start automatically after
@@ -222,6 +243,14 @@ addressBitsReal = 22
 keyboardMapFile = keyboard-maps/kbd_linux_de_DE.map
 
 floppyDirectory = Dawn/floppies
+
+# network configuration, uncomment to use NetHub
+#netHubHost = localhost
+#netHubPort = 3333
+
+# internal time service as network fallback: time zone offset to GMT in minutes (negative => west, positive => east)
+# Germany with DST => +120 ; Alaska => -480 
+localTimeOffsetMinutes = 120
 
 autostart = true
 ```
@@ -367,13 +396,6 @@ Not merging the delta has the following effects:
   the guest OS once it was booted: to restart the OS, the Dwarf program must be stopped and
   started again
   
-- no network access is available: it is simply not implemented yet, the current network
-  device simply simulates packet sending to satisfy the basic needs of Pilot (send broadcasts
-  querying for time and clearinghouse servers).  
-  But even if a functional network interface was present, it would not be
-  useful unless there is a server present on the network, providing minimal XNS services
-  like the Clearinghouse (for the necessary naming service).
-  
 - furthermore other non-vital devices are missing, having only rudimentary agent implementations
   (stream, tty, serial and parallel ports).
 
@@ -381,7 +403,17 @@ Not merging the delta has the following effects:
   with the "external" world (local file access, local printing, copy&paste, ...) will probably
   leave the system in an unusable state (hourglass mouse pointer with fast running cpu), as
   Dwarfs agent probably gives the wrong answer for "not available". 
-  
+
+- although Dwarf now supports networking through the Dodo NetHub, the network functionality
+and capability is however restricted as XDE does mostly not start opening
+SPP connections and is therefore incapable to use XNS services; this is not a problem
+specific to Dwarf, as the same XDE (the Dawn disk) shows the same behaviour with other
+emulators (Dawn, Guam), see section *Environments known (not) to work* in the
+[Dodo readme](https://github.com/devhawala/dodo/blob/master/readme.md).    
+If connecting to NetHub is not configured, an internal time service is automatically
+used as fallback, speeding up booting (MP code 0937 is almost invisible) and allowing
+to define the local time zone.
+
 - although Dwarfs mesa processor implementation supports both the "old" global frame architecture
 (all global frames are in the Main Data Space) and the "new" architecture ("MDS-relieved": global
 frames can reside outside the MDS), only the "new" variant has ever been tested, as no bootable
@@ -424,9 +456,10 @@ documents about such "details" as:
 - initialization sequence for loading and preparing the germ to bring a mesa engine in a runnable state
   as defined by PrincOps for the initial XFER.
   
-Further thanks go to websites like [Bitsavers](http://bitsavers.org/), [Computer History Museum](http://www.computerhistory.org/)
-or [DigiBarn Computer Museum](http://www.digibarn.com/) (just to name a few!) and the people behind these sites and museums
-which archive the heritage of the emerging digital age, be it documents or software, among them also for Xerox systems.
+Further thanks go to websites resp. museums like [Bitsavers](http://bitsavers.org/),
+[Computer History Museum](http://www.computerhistory.org/) or [DigiBarn Computer Museum](http://www.digibarn.com/)
+(just to name a few!) and the people behind these sites and museums
+which archive the heritage of the emerging digital age, be it documents, hardware or software, among them also for Xerox systems.
 
 Xerox itself has thankworthy made the Alto software and documentation accessible (hosted by the Computer History Museum, see
 [Xerox PARC Alto filesystem archive](http://xeroxalto.computerhistory.org/index.html)), a similar generosity regarding

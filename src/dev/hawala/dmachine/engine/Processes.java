@@ -729,6 +729,17 @@ public class Processes {
 			Agents.processPendingMesaMemoryUpdates();
 		}
 		
+		// atomically get the wake-up bits possibly added during import of external data
+		pendingWakeups = Cpu.WP.get();
+		while(!Cpu.WP.compareAndSet(pendingWakeups, 0)) {
+			pendingWakeups = Cpu.WP.get();
+		}
+		short newWakeups = (short)(pendingWakeups & 0xFFFF);
+//		if (newWakeups != 0) {
+//			System.out.printf("#+#+#+# new interrupts after memory update: 0x%04X\n", newWakeups);
+//		}
+		wakeups |= newWakeups;
+		
 		// if no mesa wakeups pending => done
 		if (wakeups == 0) {
 			return false;
