@@ -427,7 +427,7 @@ public class FloppyAgent extends Agent {
 		}
 	}
 	
-	private static class LegacyFloppyDisk extends FloppyDisk3dot5 {
+	public static class LegacyFloppyDisk extends FloppyDisk3dot5 {
 
 		// the sectors of the original disk to be transformed
 		protected final List<short[]> sectors = new ArrayList<>();
@@ -812,7 +812,7 @@ public class FloppyAgent extends Agent {
 		}
 	}
 	
-	private static class IMDFloppyDisk extends LegacyFloppyDisk {
+	public static class IMDFloppyDisk extends LegacyFloppyDisk {
 		
 		public IMDFloppyDisk(File f) throws IOException {
 			super(f);
@@ -986,7 +986,7 @@ public class FloppyAgent extends Agent {
 		}
 	}
 	
-	private static class DMKFloppyDisk extends LegacyFloppyDisk {
+	public static class DMKFloppyDisk extends LegacyFloppyDisk {
 
 		public DMKFloppyDisk(File f) throws IOException {
 			super(f);

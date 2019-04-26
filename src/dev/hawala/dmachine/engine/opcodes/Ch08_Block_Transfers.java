@@ -381,6 +381,7 @@ public class Ch08_Block_Transfers {
 						Cpu.push((short)(count));
 						Cpu.pushLong(sourceBase);
 						Cpu.push((short)(sourceOffset));
+						Cpu.PC = Cpu.savedPC;
 						return;
 					}
 				}
@@ -425,6 +426,7 @@ public class Ch08_Block_Transfers {
 						Cpu.push((short)(count));
 						Cpu.pushLong(sourceBase);
 						Cpu.push((short)(sourceOffset));
+						Cpu.PC = Cpu.savedPC;
 						return;
 					}
 				}

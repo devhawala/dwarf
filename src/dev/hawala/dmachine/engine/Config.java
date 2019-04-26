@@ -45,6 +45,19 @@ public class Config {
 	public static final boolean LOG_OPCODES = false;
 	
 	/**
+	 * log as flight recorder?
+	 * (i.e.: collect but do not write the data to stdout, speeding up
+	 * things, but having them at hand if needed, e.g. if a stack trap happens)
+	 * (slows down things, but not to the point as writing to stdout)
+	 */
+	public static final boolean LOG_OPCODES_AS_FLIGHTRECORDER = false;
+	
+	/**
+	 * prepend the stack data before the logged instruction in flight recorder mode?
+	 */
+	public static final boolean FLIGHTRECORDER_WITH_STACK = false;
+	
+	/**
 	 * use interactive utility for debugging opcode execution?
 	 */
 	public static final boolean USE_DEBUG_INTERPRETER = false;

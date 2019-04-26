@@ -449,7 +449,7 @@ public class Dwarf {
 				
 				if (resetKeysOnFocusLost) {
 					FocusListener focusHandler = new FocusListener() {
-						@Override public void focusGained(FocusEvent e) { }
+						@Override public void focusGained(FocusEvent e) { uiDataConsumer.resetKeys(); }
 						@Override public void focusLost(FocusEvent e) { uiDataConsumer.resetKeys(); }
 					};
 					window.getDisplayPane().addFocusListener(focusHandler);

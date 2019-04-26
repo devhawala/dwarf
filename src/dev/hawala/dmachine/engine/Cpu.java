@@ -76,21 +76,61 @@ public class Cpu {
 		System.out.println("INF: -------------------------------------- " + msg);
 	}
 	
+	private static final int FLIGHTRECORDER_MAX = 0x1FFFF;
+	
+	private static final String[] oplog = new String[FLIGHTRECORDER_MAX + 1];
+	private static int currOplog = 0;
+	private static final StringBuilder oplogSb = new StringBuilder();
+	
+	private static void opcodesLogf(String format, Object... args) {
+		if (Config.LOG_OPCODES_AS_FLIGHTRECORDER) {
+			if (Config.FLIGHTRECORDER_WITH_STACK) {
+				oplogSb.setLength(0);
+				oplogSb.append(String.format("stack[%02d] ", SP));
+				for (int i = 0; i < SP; i++) {
+					oplogSb.append(String.format(" 0x%04X (", stack[i]));
+					char c = (char)((stack[i] >> 8) & 0xFF);
+					oplogSb.append((c >= ' ' && c < (char)0x7F) ? c : ' ');
+					c = (char)(stack[i] & 0xFF);
+					oplogSb.append((c >= ' ' && c < (char)0x7F) ? c : ' ');
+					oplogSb.append(")");
+				}
+				oplogSb.append("\n");
+				oplog[currOplog] = oplogSb.toString();
+				currOplog = (currOplog + 1) & FLIGHTRECORDER_MAX;
+			}
+			oplog[currOplog] = String.format(format,  args);
+			currOplog = (currOplog + 1) & FLIGHTRECORDER_MAX;
+		} else {
+			System.out.printf(format, args);
+		}
+	}
+	
+	public static void dumpOplog() {
+		int idx = currOplog;
+		while(true) {
+			String line = oplog[currOplog];
+			currOplog = (currOplog + 1) & FLIGHTRECORDER_MAX;
+			if (line != null) { System.out.print(line); }
+			if (idx == currOplog) { break; }
+		}
+	}
+	
 	public static void logf(String format, Object... args) {
 		if (Config.LOG_OPCODES && unsilenced) {
-			System.out.printf(format, args); 
+			opcodesLogf(format, args); 
 		}
 	}
 	
 	public static void logOpcode(String opName) {
 		if (unsilenced) {
-			System.out.printf("%06d: 0x%08X+0x%04X %s\n", insns, CB, savedPC, opName);
+			opcodesLogf("%06d: 0x%08X+0x%04X %s\n", insns, CB, savedPC, opName);
 		}
 	}
 	
 	public static void logOpcode_alpha(String opName) {
 		if (unsilenced) {
-			System.out.printf("%06d: 0x%08X+0x%04X %s(alpha=0x%02X)\n", insns, CB, savedPC, opName, Mem.peekNextCodeByte());
+			opcodesLogf("%06d: 0x%08X+0x%04X %s(alpha=0x%02X)\n", insns, CB, savedPC, opName, Mem.peekNextCodeByte());
 		}
 	}
 	
@@ -98,20 +138,20 @@ public class Cpu {
 		if (unsilenced) {
 			int alpha = Mem.peekNextCodeByte();
 			int salpha = ((alpha & 0x0080) != 0) ? (alpha | 0xFFFFFF00) : (alpha & 0x0000007F);
-			System.out.printf("%06d: 0x%08X+0x%04X %s(alpha=%d)\n", insns, CB, savedPC, opName, salpha);
+			opcodesLogf("%06d: 0x%08X+0x%04X %s(alpha=%d)\n", insns, CB, savedPC, opName, salpha);
 		}
 	}
 	
 	public static void logOpcode_pair(String opName) {
 		if (unsilenced) {
-			System.out.printf("%06d: 0x%08X+0x%04X %s(pair=0x%02X)\n", insns, CB, savedPC, opName, Mem.peekNextCodeByte());
+			opcodesLogf("%06d: 0x%08X+0x%04X %s(pair=0x%02X)\n", insns, CB, savedPC, opName, Mem.peekNextCodeByte());
 		}
 	}
 	
 	public static void logOpcode_alphabeta(String opName) {
 		if (unsilenced) {
 			int w = Mem.peekNextCodeWord();
-			System.out.printf("%06d: 0x%08X+0x%04X %s(alpha=0x%02X , beta=0x%02X)\n", insns, CB, savedPC, opName, w >>> 8, w & 0x00FF);
+			opcodesLogf("%06d: 0x%08X+0x%04X %s(alpha=0x%02X , beta=0x%02X)\n", insns, CB, savedPC, opName, w >>> 8, w & 0x00FF);
 		}
 	}
 	
@@ -120,13 +160,13 @@ public class Cpu {
 			int w = Mem.peekNextCodeWord();
 			int beta = w & 0x00FF;
 			int sbeta = ((beta & 0x0080) != 0) ? (beta | 0xFFFFFF00) : (beta & 0x0000007F);
-			System.out.printf("%06d: 0x%08X+0x%04X %s(alpha=0x%02X , sbeta=%d)\n", insns, CB, savedPC, opName, w >>> 8, sbeta);
+			opcodesLogf("%06d: 0x%08X+0x%04X %s(alpha=0x%02X , sbeta=%d)\n", insns, CB, savedPC, opName, w >>> 8, sbeta);
 		}
 	}
 	
 	public static void logOpcode_word(String opName) {
 		if (unsilenced) {
-			System.out.printf("%06d: 0x%08X+0x%04X %s(word=0x%04X)\n", insns, CB, savedPC, opName, Mem.peekNextCodeWord());
+			opcodesLogf("%06d: 0x%08X+0x%04X %s(word=0x%04X)\n", insns, CB, savedPC, opName, Mem.peekNextCodeWord());
 		}
 	}
 	
@@ -134,25 +174,25 @@ public class Cpu {
 		if (unsilenced) {
 			int word = Mem.peekNextCodeWord();
 			int sword = ((word & 0x8000) != 0) ? (word | 0xFFFF0000) : (word & 0x00007FFF);
-			System.out.printf("%06d: 0x%08X+0x%04X %s(alpha=%d)\n", insns, CB, savedPC, opName, sword);
+			opcodesLogf("%06d: 0x%08X+0x%04X %s(alpha=%d)\n", insns, CB, savedPC, opName, sword);
 		}
 	}
 	
 	public static void logEscOpcode(String opName) {
 		if (unsilenced) {
-			System.out.printf("%06d: 0x%08X+0x%04X ESC.%s\n", insns, CB, savedPC, opName);
+			opcodesLogf("%06d: 0x%08X+0x%04X ESC.%s\n", insns, CB, savedPC, opName);
 		}
 	}
 	
 	public static void logEscOpcode_alpha(String opName) {
 		if (unsilenced) {
-			System.out.printf("%06d: 0x%08X+0x%04X ESC.%s(alpha=0x%02X)\n", insns, CB, savedPC, opName, Mem.peekNextCodeByte());
+			opcodesLogf("%06d: 0x%08X+0x%04X ESC.%s(alpha=0x%02X)\n", insns, CB, savedPC, opName, Mem.peekNextCodeByte());
 		}
 	}
 	
 	public static void logEscOpcode_word(String opName) {
 		if (unsilenced) {
-			System.out.printf("%06d: 0x%08X+0x%04X ESC.%s(word=0x%04X)\n", insns, CB, savedPC, opName, Mem.peekNextCodeWord());
+			opcodesLogf("%06d: 0x%08X+0x%04X ESC.%s(word=0x%04X)\n", insns, CB, savedPC, opName, Mem.peekNextCodeWord());
 		}
 	}
 	
@@ -721,10 +761,12 @@ public class Cpu {
 	}
 	
 	public static void logTrapOrFault(boolean logOnly, String msg) {
-//		System.out.printf("## at 0x%08X+0x%04X [insn# %d]\n## %s", CB, savedPC, insns, msg);
 		if (!Config.LOG_OPCODES || !Config.USE_DEBUG_INTERPRETER) { return; }
 		if (logOnly) { return; }
 		
+		if (!Cpu.unsilenced) { return; }
+
+		System.out.printf("## at 0x%08X+0x%04X [insn# %d]\n## %s", CB, savedPC, insns, msg);
 		String answer = "";
 		while(!"a".equalsIgnoreCase(answer) && !"d".equalsIgnoreCase(answer) && !"c".equalsIgnoreCase(answer)) {
 			System.out.printf("(C)ontinue or (D)ebug or (A)bort ? >>> ");
@@ -809,6 +851,7 @@ public class Cpu {
 	
 	public static void stackError() {
 		logTrapOrFault(" ## stackError\n");
+		dumpOplog();
 		thrower.signalStackError();
 	}
 	
@@ -994,6 +1037,14 @@ public class Cpu {
 //	private static boolean dumpOpcodes = true;
 	
 	private static boolean dumpIoArea = true;
+	
+	public static void armDebugInterpreter() {
+		// go = false;
+		unsilenced = true;
+		silencedCount = 0;
+		// System.out.println("armDebugInterpreter()");
+		
+	}
 	
 	private static void debugInterpreter() {
 				
