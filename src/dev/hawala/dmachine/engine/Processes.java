@@ -664,7 +664,21 @@ public class Processes {
 		}
 	}
 	
-	// special interrupt for agents requesting to acces the mesa virtual memory
+	// special interrupts for starting / stopping flight recorder on the fly :-)
+	private static final int FLIGHTRECORDER_START = 0x08000000;
+	private static final int FLIGHTRECORDER_STOP_AND_DUMP = 0x04000000;
+	public static void requestFlightRecorderStart() {
+		System.out.println("requestFlightRecorderStart()");
+		System.out.flush();
+		innerRequestInterrupt(FLIGHTRECORDER_START);
+	}
+	public static void requestFlightRecorderStopAndDump() {
+		System.out.println("requestFlightRecorderStopAndDump()");
+		System.out.flush();
+		innerRequestInterrupt(FLIGHTRECORDER_STOP_AND_DUMP);
+	}
+	
+	// special interrupt for agents requesting to access the mesa virtual memory
 	private static final int DATA_REFRESH_INTERRUPT = 0x40000000;
 	
 	// special interrupt requesting to stop the mesa engine (e.g. by a UI button)
@@ -718,6 +732,17 @@ public class Processes {
 		
 		// the mesa PrincOps wakeups (subset of all possible interrupts to the mesa engine)
 		short wakeups = (short)(pendingWakeups & 0xFFFF);
+		
+		// flight-recorder requests
+		if (Config.LOG_OPCODES && Config.LOG_OPCODES_AS_FLIGHTRECORDER) {
+			if ((pendingWakeups & FLIGHTRECORDER_START) != 0) {
+				Cpu.armDebugInterpreter();
+			}
+			if ((pendingWakeups & FLIGHTRECORDER_STOP_AND_DUMP) != 0) {
+				Cpu.dumpOplog();
+				Cpu.disarmDebugInterpreter();
+			}
+		}
 		
 		// is a "stop the engine" request pending?
 		if ((pendingWakeups & EXTERNAL_STOP_INTERRUPT) != 0) {

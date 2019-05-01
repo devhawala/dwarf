@@ -33,6 +33,9 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import dev.hawala.dmachine.engine.Config;
+import dev.hawala.dmachine.engine.Processes;
+
 /**
  * Key stroke listener for the Dwarf screen pane, forwarding the key-pressed and
  * key-released event to the keyboard-mapper.
@@ -80,8 +83,25 @@ public class KeyHandler implements KeyListener {
 		}
 	}
 	
+	private boolean dumpOnVkLess = false;
+	
 	@Override
 	public void keyPressed(KeyEvent evt) {
+		if (Config.USE_DEBUG_INTERPRETER && evt.getExtendedKeyCode() == KeyEvent.VK_LESS) {
+//			System.out.println("key VK_LESS...");
+//			System.out.flush();
+			
+			if (this.dumpOnVkLess) {
+				Processes.requestFlightRecorderStopAndDump();
+				this.dumpOnVkLess = false;
+			} else {
+				Processes.requestFlightRecorderStart();
+				this.dumpOnVkLess = true;
+			}
+			
+			return;
+		}
+				
 //		System.out.printf("at %d : panel.keyPressed -> keyCode = %03d, extKeyCode = %05d\n",
 //				System.currentTimeMillis(), evt.getKeyCode(), evt.getExtendedKeyCode());
 		this.keyMapper.pressed(evt.getExtendedKeyCode());

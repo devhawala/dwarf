@@ -93,19 +93,5 @@ public class Config {
 	public static final boolean AGENTS_LOG_FLOPPY = false;
 	
 	public static final boolean AGENTS_LOG_NETWORK = false;
-	
-	// --
-	// the following is currently not yet implemented/used ...
-	// --
-	
-	/**
-	 * number of instructions incl. important registers to remember for dump after a serious problem
-	 */
-	public static final int TRACK_OPCODES_DEPTH = 256;
-	
-	/**
-	 * remember the last TRACK_OPCODES_DEPTH instructions for debugging purposes
-	 */
-	public static final boolean TRACK_OPCODES = false;
 
 }

@@ -516,68 +516,7 @@ public class Ch08_Block_Transfers {
 	private interface PixelCombiner {
 		int combine(int left, int right);
 	}
-	
-	private static PixelCombiner getCombinerOLD(SrcFunc srcFunc, DstFunc dstFunc) {
-		switch(dstFunc) {
 		
-		case src:
-			if (srcFunc == SrcFunc.fnull) {
-				return (s,d) -> s;
-			} else {
-				return (s,d) -> (s == 0) ? 1 : 0; // (s != 0) ? 0 : 1;
-			}
-			
-		case srcIfDstLE1:
-			if (srcFunc == SrcFunc.fnull) {
-				return (s,d) -> (d > 1) ? d : s;
-			} else {
-				return (s,d) -> (d > 1) ? d : (s == 0) ? 1 : 0;
-			}
-		
-		case srcIf0:
-			if (srcFunc == SrcFunc.fnull) {
-				return (s,d) -> (s == 0) ? 0 : d;
-			} else {
-				return (s,d) -> (s == 0) ? d : 0; // d : s;
-			}
-			
-		case srcIfDstNot0:
-			if (srcFunc == SrcFunc.fnull) {
-				return (s,d) -> (d == 0) ? 0 : s;
-			} else {
-				return (s,d) -> (d == 0) ? 0 : (s == 0) ? 1 : 0;
-			}
-			
-		case srcIfNot0:
-			if (srcFunc == SrcFunc.fnull) {
-				return (s,d) -> (s == 0) ? d : s;
-			} else {
-				return (s,d) -> (s != 0) ? d : 0; // d : 1; // d : 0;
-			}
-			
-		case srcIfDst0:
-			if (srcFunc == SrcFunc.fnull) {
-				return (s,d) -> (d == 0) ? s : d;
-			} else {
-				return (s,d) -> (d != 0) ? d : (s == 0) ? 1 : 0;
-			}
-			
-		case pixelXor:			
-		case srcXorDst:
-			if (srcFunc == SrcFunc.fnull) {
-				return (s,d) -> ((s < 1 && d < 1) || (s > 0 && d > 0)) ? 0 : 1;
-			} else {
-				return (s,d) -> ((s > 0 && d < 1) || (s < 1 && d > 0)) ? 0 : 1;
-			}
-			
-		default:
-			// how did we get there ??
-			System.out.println("################### unhandled dstFunc: " + dstFunc);
-			return (s,d) -> s;
-			
-		}
-	}
-	
 	private static PixelCombiner getCombiner(SrcFunc srcFunc, DstFunc dstFunc) {
 		PixelCombiner dstOp;
 		
@@ -637,6 +576,7 @@ public class Ch08_Block_Transfers {
 		private final int pixelMask; // mask to get a pixel out of a word after shifting to low bits
 		
 		private final int pixelsPerLine; // line length in pixels, as per initialization
+		private final int bitsPerLine;   // line length in bits (pixelsPerLine * bitsPerPixel)
 		
 		private final int pixelTransferWidth; // pixels to transfer per line
 		
@@ -685,16 +625,6 @@ public class Ch08_Block_Transfers {
 			
 			int pixelsPerWord = PrincOpsDefs.WORD_BITS / bitsPerPixel;
 			
-			// adjust lpLineStart & pixelOffset if backward
-			// (but: backward ColorBlt seems to point to the first item of the last pixel line
-			//       - and pixelsPerLine is positive instead of negative as for BitBlt (and BitBltX?))
-			if (backward && pixelsPerLine < 0) {
-				pixelOffset -= transferWidth - 1;
-				int backWords = - ((pixelOffset - pixelsPerWord + 1) / pixelsPerWord);
-				lpLineStart -= backWords;
-				pixelOffset += (backWords * pixelsPerWord);
-			}
-			
 			// setup finals
 			this.bitsPerPixel = bitsPerPixel;
 			int tmpMask = 1;
@@ -703,6 +633,7 @@ public class Ch08_Block_Transfers {
 			}
 			this.pixelMask = tmpMask;
 			this.pixelsPerLine = Math.abs(pixelsPerLine); // negative if backward...
+			this.bitsPerLine = this.pixelsPerLine * this.bitsPerPixel;
 			this.pixelTransferWidth = transferWidth;
 			this.wordsPerLine 
 				= (((Math.abs(pixelOffset) + Math.abs(transferWidth)) * bitsPerPixel) + PrincOpsDefs.WORD_BITS - 1) / PrincOpsDefs.WORD_BITS
@@ -734,22 +665,31 @@ public class Ch08_Block_Transfers {
 
 		@Override
 		public void moveToNextLine() {
-			int bitsJump = (this.pixelOffset + this.pixelsPerLine) * this.bitsPerPixel;
+			int oldBitsOffset = this.pixelOffset * this.bitsPerPixel;
+			
 			if (this.isBackward) {
-				this.lpLineStart -= bitsJump / PrincOpsDefs.WORD_BITS;
+				int nextBitsOffset = oldBitsOffset - this.bitsPerLine;
+				int wordsToSubtract = Math.abs((nextBitsOffset - PrincOpsDefs.WORD_BITS + 1) / PrincOpsDefs.WORD_BITS);
+				int newBitsOffset = nextBitsOffset + (wordsToSubtract * PrincOpsDefs.WORD_BITS);
+				
+				this.lpLineStart -= wordsToSubtract;
+				this.pixelOffset = newBitsOffset / this.bitsPerPixel;
+				this.pixShift = PrincOpsDefs.WORD_BITS - newBitsOffset - this.bitsPerPixel;
 			} else {
-				this.lpLineStart += bitsJump / PrincOpsDefs.WORD_BITS;
+				int nextBitsOffset = oldBitsOffset + this.bitsPerLine;
+				int wordsToAdd = nextBitsOffset / PrincOpsDefs.WORD_BITS;
+				int newBitsOffset = nextBitsOffset % PrincOpsDefs.WORD_BITS;
+
+				this.lpLineStart += wordsToAdd;
+				this.pixelOffset = newBitsOffset / this.bitsPerPixel;
+				this.pixShift = PrincOpsDefs.WORD_BITS - newBitsOffset - this.bitsPerPixel;
 			}
-			this.pixelOffset = (bitsJump % PrincOpsDefs.WORD_BITS) / this.bitsPerPixel;
 			
 //			if (logLineChanges) {
-//				System.out.printf("++ moveToNextLine() -> lpLineStart = 0x%08X , pixelOffset = %3d -> x = %d , y = %d\n",
-//						this.lpLineStart, this.pixelOffset,
+//				System.out.printf("++ moveToNextLine() -> lpLineStart = 0x%08X , pixelOffset = %3d  , pixShift = %3d -> x = %d , y = %d\n",
+//						this.lpLineStart, this.pixelOffset, this.pixShift,
 //						Mem.getDisplayX(this.lpLineStart, this.pixelOffset), Mem.getDisplayY(this.lpLineStart, this.pixelOffset));
 //			}
-			
-			int bitsOffset = this.pixelOffset * this.bitsPerPixel;
-			this.pixShift = PrincOpsDefs.WORD_BITS - (bitsOffset % PrincOpsDefs.WORD_BITS) - this.bitsPerPixel;
 		}
 		
 		@Override
@@ -955,7 +895,7 @@ public class Ch08_Block_Transfers {
 			if (patternPixels == null) {
 				int[] pixels = new int[this.pixelsWidth * this.pixelsHeight];
 				for (int i = 0; i < pixels.length; i++) {
-					short pixelValue = Mem.readWord(this.lpPatternStart + i);;
+					short pixelValue = Mem.readWord(this.lpPatternStart + i);
 					pixels[i] = (pixelValue == 0) ? 0 : 1; // ?? condition; ((pixelValue & 0x8000) == 0 
 				}
 				this.patternPixels = pixels;
@@ -990,7 +930,7 @@ public class Ch08_Block_Transfers {
 	
 	/**
 	 * Pixel source for a pattern having all bits in the same b/w color (either
-	 * all pixels block or all pixels white).
+	 * all pixels black or all pixels white).
 	 */
 	private static class MonochromeUnipixelPatternSource implements PixelSource {
 		
@@ -1024,7 +964,7 @@ public class Ch08_Block_Transfers {
 	/**
 	 * Core implementation of the BITBLT-type operations, allowing to load
 	 * the parameters for the instruction variants (BITBLT, BITBLTX and COLORBLT)
-	 * to a uniform structure, ensuring for restartability and providing the commmon
+	 * to a uniform structure, ensuring for restartability and providing the common
 	 * execution engine for all instruction variants.
 	 */
 	private static class BitBltArgs {
@@ -1124,7 +1064,7 @@ public class Ch08_Block_Transfers {
 			// logging if enabled and the special key is pressed (see KeyboardMapper.pressed(key) => F1) 
 			int dstX = Mem.getDisplayX(this.dstWord, this.dstPixel);
 			int dstY = Mem.getDisplayY(this.dstWord, this.dstPixel);
-			if (Config.LOG_BITBLT_INSNS && Config.dynLogBitblts) {
+			if (Config.LOG_BITBLT_INSNS && Config.dynLogBitblts) { // if (Config.LOG_BITBLT_INSNS && dstX >= 700 && dstY >= 0 && dstY < 32) {
 				if (logMsg != null) { System.out.println(logMsg); }
 				System.out.printf("\n++ loadFromColorBltArgs( 0x%04X )\n", pointer);
 				System.out.printf("++ dstWord: 0x%08X , dstPixel: 0x%04X, dstPpl: %d\n", this.dstWord, this.dstPixel, this.dstPpl);
@@ -1174,7 +1114,7 @@ public class Ch08_Block_Transfers {
 			
 			this.srcPpl = Mem.readMDSWord(pointer, 7);
 			this.patReserved = 1;
-			this.patUnpacked = true;
+			this.patUnpacked = false;
 			this.patYOffset = (this.srcPpl >> 8) & 0x000F;
 			this.patWidthMinusOne = (this.srcPpl >> 4) & 0x000F;
 			this.patHeightMinusOne = this.srcPpl & 0x000F;
@@ -1201,18 +1141,18 @@ public class Ch08_Block_Transfers {
 			this.colorMapping[1] = 1;
 			
 			if (Config.LOG_BITBLT_INSNS && Config.dynLogBitblts) {
-				System.out.printf("##\n## ESC x2B .. BITBLT at 0x%08X+0x%04X [insn# %d]\n##\n", Cpu.CB, Cpu.savedPC, Cpu.insns);
-				System.out.printf("\n++ loadFromBitBltArgs( 0x%04X )\n", pointer);
-				System.out.printf("++ dstWord: 0x%08X , dstPixel: 0x%04X, dstPpl: %d\n", this.dstWord, this.dstPixel, this.dstPpl);
-				System.out.printf("++ srcWord: 0x%08X , srcPixel: 0x%04X, srcPpl: %d\n", this.srcWord, this.srcPixel, this.srcPpl);
-				System.out.printf("++ width: %d , height: %d , tmp = 0x%04X\n", this.width, this.height, tmp);
-				System.out.println("++   direction = " + this.direction);
-				System.out.println("++     srcType = " + this.srcType);
-				System.out.println("++     dstType = " + this.dstType);
-				System.out.println("++     pattern = " + this.pattern);
-				System.out.println("++     srcFunc = " + this.srcFunc);
-				System.out.println("++     dstFunc = " + this.dstFunc);
-				System.out.printf("++ colorMapping[0] = %d , colorMapping[1] = %d\n\n", this.colorMapping[0], this.colorMapping[1]);
+				Cpu.logf("##\n## ESC x2B .. BITBLT at 0x%08X+0x%04X [insn# %d]\n##\n", Cpu.CB, Cpu.savedPC, Cpu.insns);
+				Cpu.logf("\n++ loadFromBitBltArgs( 0x%04X )\n", pointer);
+				Cpu.logf("++ dstWord: 0x%08X , dstPixel: 0x%04X, dstPpl: %d\n", this.dstWord, this.dstPixel, this.dstPpl);
+				Cpu.logf("++ srcWord: 0x%08X , srcPixel: 0x%04X, srcPpl: %d\n", this.srcWord, this.srcPixel, this.srcPpl);
+				Cpu.logf("++ width: %d , height: %d , tmp = 0x%04X\n", this.width, this.height, tmp);
+				Cpu.logf("++   direction = " + this.direction);
+				Cpu.logf("++     srcType = " + this.srcType);
+				Cpu.logf("++     dstType = " + this.dstType);
+				Cpu.logf("++     pattern = " + this.pattern);
+				Cpu.logf("++     srcFunc = " + this.srcFunc);
+				Cpu.logf("++     dstFunc = " + this.dstFunc);
+				Cpu.logf("++ colorMapping[0] = %d , colorMapping[1] = %d\n\n", this.colorMapping[0], this.colorMapping[1]);
 			}
 			
 			this.setupWorkers();
@@ -1262,6 +1202,16 @@ public class Ch08_Block_Transfers {
 		// create pixel source and sink as well as the pixel combiner based on the instruction parameters.
 		private void setupWorkers() {
 			boolean isBackward = (this.direction == Direction.backward);
+			
+			// begin fix strange target color setup where both colors are identical
+			// (so it would be filling with this color no matter of src/dst-bits/functions)
+			// (one such strange case is restoring the desktop background for the help icon in globalview 2.1)
+			if (this.colorMapping[0] == 0 && this.colorMapping[1] == 0) {
+				this.colorMapping[1] = 1;
+			} else if (this.colorMapping[0] != 0 && this.colorMapping[1] == this.colorMapping[0]) {
+				this.colorMapping[1] = 0;
+			}
+			// end fix strange target color setup
 			
 			if (this.pattern) {
 				boolean onePixel = (this.patWidthMinusOne == 0 && this.patHeightMinusOne == 0);
@@ -1338,7 +1288,7 @@ public class Ch08_Block_Transfers {
 					int oldDstPixel = this.pixelSink.getCurrPixel();
 					
 					int newDstPixel = this.combiner.combine(srcPixel, oldDstPixel);
-					this.pixelSink.setCurrPixel(newDstPixel);
+					this.pixelSink.setCurrPixel(this.colorMapping[newDstPixel]);
 					
 					this.pixelSource.moveToNextPixel();
 					this.pixelSink.moveToNextPixel();

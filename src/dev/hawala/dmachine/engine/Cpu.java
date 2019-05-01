@@ -118,7 +118,9 @@ public class Cpu {
 	
 	public static void logf(String format, Object... args) {
 		if (Config.LOG_OPCODES && unsilenced) {
-			opcodesLogf(format, args); 
+			// opcodesLogf(format, args);
+			oplog[currOplog] = String.format(format,  args);
+			currOplog = (currOplog + 1) & FLIGHTRECORDER_MAX;
 		}
 	}
 	
@@ -1042,7 +1044,17 @@ public class Cpu {
 		// go = false;
 		unsilenced = true;
 		silencedCount = 0;
-		// System.out.println("armDebugInterpreter()");
+		System.out.println("armDebugInterpreter()");
+		System.out.flush();
+		
+	}
+	
+	public static void disarmDebugInterpreter() {
+		// go = false;
+		unsilenced = false;
+		silencedCount = 0x7FFFFFFF;
+		System.out.println("disarmDebugInterpreter()");
+		System.out.flush();
 		
 	}
 	

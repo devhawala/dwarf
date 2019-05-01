@@ -1198,15 +1198,20 @@ public class Ch08_BlockTrfInsnsTest extends AbstractInstructionTest {
 		// the last item of the blocks. to be processed, and the source and destination bits per line
 		// must be negative.
 		
+		// where
+		// -> "item" is: pixel line (for backward: start of last pixel line)
+		// -> and not  : pixel      (for backward: not the last pixel in the last line)
+		// !!
+		
 		mkBitBltArg(testShortMem,
-				testLongMem + 74, // dstWord of last item
-				dstBit, // dstBit of last item
-				-6 * 16, // dstBpl (negative because backward) 
-				testLongMem + 32, // srcWord of last item
-				15, // srcBit of last item
-				-6 * 16, // srcBpl (negative because backward)
-				32, // width
-				5, // height
+				testLongMem + 72, // dstWord of last item
+				dstBit,           // dstBit of last item
+				-6 * 16,          // dstBpl (negative because backward) 
+				testLongMem + 31, // srcWord of last item
+				0,                // srcBit of last item
+				-6 * 16,          // srcBpl (negative because backward)
+				32,               // width
+				5,                // height
 				flg_backward, flg_disjoint, flg_disjointItems, flg_srcFuncNull, flg_dstFuncOr);
 		mkStack(testShortMem);
 		Ch08_Block_Transfers.ESC_x2B_BITBLT.execute();
@@ -1224,11 +1229,11 @@ public class Ch08_BlockTrfInsnsTest extends AbstractInstructionTest {
 			    //0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF01234...
 			    ,"                                                                                                "
 			    ,"                                                                                                "
-			    ,(shift+" XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                                                               ").substring(0, 96)
-			    ,(shift+" X                              X                                                               ").substring(0, 96)
-			    ,(shift+" X                              X                                                               ").substring(0, 96)
-			    ,(shift+" X                              X                                                               ").substring(0, 96)
-			    ,(shift+" XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                                                               ").substring(0, 96)
+			    ,(shift+"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                                                                ").substring(0, 96)
+			    ,(shift+"X                              X                                                                ").substring(0, 96)
+			    ,(shift+"X                              X                                                                ").substring(0, 96)
+			    ,(shift+"X                              X                                                                ").substring(0, 96)
+			    ,(shift+"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX                                                                ").substring(0, 96)
 			           //0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF01234...
 			    ,"                                                                                                "
 			    ,"                                                                                                "
@@ -1323,12 +1328,17 @@ public class Ch08_BlockTrfInsnsTest extends AbstractInstructionTest {
 		// the last item of the blocks. to be processed, and the source and destination bits per line
 		// must be negative.
 		
+		// where
+		// -> "item" is: pixel line (for backward: start of last pixel line)
+		// -> and not  : pixel      (for backward: not the last pixel in the last line)
+		// !!
+		
 		mkBitBltArg(testShortMem,
-				testLongMem + 74, // dstWord of last item
-				1, // dstBit of last item
+				testLongMem + 72, // dstWord of last item
+				2, // dstBit of last item
 				-6 * 16, // dstBpl (negative because backward) 
-				testLongMem + 32, // srcWord of last item (6th line => 5*6 + 3rd word => +2 = 32)  
-				15, // srcBit of last item
+				testLongMem + 31, // srcWord of last item (6th line => 5*6 + 3rd word => +2 = 32)  
+				0, // srcBit of last item
 				-6 * 16, // srcBpl (negative because backward)
 				32, // width
 				5, // height
@@ -1612,6 +1622,108 @@ public class Ch08_BlockTrfInsnsTest extends AbstractInstructionTest {
 			    ,"XXXXXXXXXXXXXXXX"
 			    ,"                "
 			    ,"                "
+			);
+	}
+	
+	private int ch(char first, char second) {
+		return ((first << 8) & 0xFF00) | (second & 0xFF);
+	}
+	
+	private String getLongMemStringEquiv(int pos, int wordCount) {
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < wordCount; i++) {
+			int w = Mem.readWord(testLongMem + i) & 0xFFFF;
+			int c = w >>> 8;
+			sb.append( (c >= 0x20 && c < 0x7F) ? (char)c : 'µ');
+			c = w & 0xFF;
+			sb.append( (c >= 0x20 && c < 0x7F) ? (char)c : 'µ');
+		}
+		return sb.toString();
+	}
+	
+	@Test
+	public void test_BITBLT_as_BYTBLTR_misuse_backwrd() {
+		mkLongMem(
+			ch('q','w'),ch('e','r'),ch('t','z'),ch('u','i'),ch('o','p'),
+			ch('\n','a'),ch('s','d'),ch('f','g'),ch('h','j'),ch('k','l'),
+			ch('\n','y'),ch('x','c'),ch('v','b'),ch('n','m'),ch('%','%'),ch('+','+'));
+		
+		mkBitBltArg(testShortMem,
+				testLongMem + 0x0E,  // dstWord
+				0x0000,              // dstPixel
+				-8,                  // dstPpl
+				testLongMem + 0x0D,  // srcWord
+				0x0008,              // srcPixel
+				-8,                  // srcPpl
+				8,                   // width
+				23,                  // height
+				flg_backward
+				);
+				
+		mkStack(testShortMem);
+		Ch08_Block_Transfers.ESC_x2B_BITBLT.execute();
+		checkStack();
+		
+		String expected = "qwertzzuiopµasdfghjklµyxcvbnm%++";
+		String result = getLongMemStringEquiv(testLongMem, 16);
+		
+		System.out.printf(
+				"expected: %s\n" +
+				"actual..: %s\n",
+				expected, result);
+		
+		assertEquals(
+				expected,
+				result
+				);
+		
+		checkLongMem(
+			ch('q','w'),ch('e','r'),ch('t','z'),ch('z','u'),ch('i','o'),ch('p','\n'),
+			ch('a','s'),ch('d','f'),ch('g','h'),ch('j','k'),ch('l','\n'),
+			ch('y','x'),ch('c','v'),ch('b','n'),ch('m','%'),ch('+','+')
+			);
+	}
+	
+	@Test
+	public void test_BITBLT_as_BYTBLT_misuse_forward() {
+		mkLongMem(
+			ch('q','w'),ch('e','r'),ch('t','z'),ch('u','i'),ch('o','p'),
+			ch('\n','a'),ch('s','d'),ch('f','g'),ch('h','j'),ch('k','l'),
+			ch('\n','y'),ch('x','c'),ch('v','b'),ch('n','m'),ch('%','%'),ch('+','+'));
+		
+		mkBitBltArg(testShortMem,
+				testLongMem + 0x02,  // dstWord
+				0x0008,              // dstPixel
+				8,                   // dstPpl
+				testLongMem + 0x03,  // srcWord
+				0x0000,              // srcPixel
+				8,                   // srcPpl
+				8,                   // width
+				22,                  // height
+				flg_forward
+				);
+				
+		mkStack(testShortMem);
+		Ch08_Block_Transfers.ESC_x2B_BITBLT.execute();
+		checkStack();
+		
+		String expected = "qwertuiopµasdfghjklµyxcvbnmm%%++";
+		String result = getLongMemStringEquiv(testLongMem, 16);
+		
+		System.out.printf(
+				"expected: %s\n" +
+				"actual..: %s\n",
+				expected, result);
+		
+		assertEquals(
+				expected,
+				result
+				);
+		
+		checkLongMem(
+			ch('q','w'),ch('e','r'),ch('t','u'),ch('i','o'),ch('p','\n'),
+			ch('a','s'),ch('d','f'),ch('g','h'),ch('j','k'),ch('l','\n'),
+			ch('y','x'),ch('c','v'),ch('b','n'),ch('m','m'),ch('%','%'),ch('+','+')
 			);
 	}
 

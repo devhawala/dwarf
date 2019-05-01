@@ -404,16 +404,6 @@ Not merging the delta has the following effects:
   leave the system in an unusable state (hourglass mouse pointer with fast running cpu), as
   Dwarfs agent probably gives the wrong answer for "not available". 
 
-- although Dwarf now supports networking through the Dodo NetHub, the network functionality
-and capability is however restricted as XDE does mostly not start opening
-SPP connections and is therefore incapable to use XNS services; this is not a problem
-specific to Dwarf, as the same XDE (the Dawn disk) shows the same behaviour with other
-emulators (Dawn, Guam), see section *Environments known (not) to work* in the
-[Dodo readme](https://github.com/devhawala/dodo/blob/master/readme.md).    
-If connecting to NetHub is not configured, an internal time service is automatically
-used as fallback, speeding up booting (MP code 0937 is almost invisible) and allowing
-to define the local time zone.
-
 - although Dwarfs mesa processor implementation supports both the "old" global frame architecture
 (all global frames are in the Main Data Space) and the "new" architecture ("MDS-relieved": global
 frames can reside outside the MDS), only the "new" variant has ever been tested, as no bootable
@@ -425,9 +415,10 @@ Therefore no option to choose the "old" global frame architecture is available.
 
 ### Known Bugs
 
-- 2 unit tests for the BITBLT instruction currently fail, possibly testing the same subfunctions
-  causing a minor rendering problem when running GlobalView (the help icon on the top right is not
-  displayed correctly)
+(currently no known bugs; a stability problem in BYTBLT(R) instructions has been fixed, as well as
+the misinterpretation of the princops regarding handling the bit-addresses in BITBLT/COLORBLT
+instructions when direction is 'reverse', along with smaller flaws preventing the correct rendering
+of the help icon in GlobalView)
 
 ### Bibliography
 The following documents available in the internet were useful for creating Dwarf and its mesa engine:
