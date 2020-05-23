@@ -514,6 +514,36 @@ public class Mem {
 	 * code access (with caching)
 	 */
 	
+	public static int getCodeByte(int cb, int pc) {
+		int vPtr = cb + (pc >> 1);
+		int vPage = vPtr & 0xFFFFFF00;
+		int rPtr = getRealAddress(vPage, false) | (vPtr & 0x000000FF); 
+		boolean isHighByte = (pc & 0x0001) == 0;
+		
+		int codeWord = mem[rPtr];
+		if (isHighByte) {
+			return (codeWord >> 8) & 0x00FF;
+		} else {
+			return (codeWord & 0x00FF);
+		}
+	}
+	
+	public static void patchCodeByte(int cb, int pc, int codeByte) {
+		int vPtr = cb + (pc >> 1);
+		int vPage = vPtr & 0xFFFFFF00;
+		int rPtr = getRealAddress(vPage, false) | (vPtr & 0x000000FF); 
+		boolean isHighByte = (pc & 0x0001) == 0;
+		
+		codeByte &= 0x00FF;
+		int codeWord = mem[rPtr];
+		if (isHighByte) {
+			codeWord = (codeByte << 8) | (codeWord & 0x00FF);
+		} else {
+			codeWord = (codeWord & 0xFF00) | codeByte;
+		}
+		mem[rPtr] = (short)codeWord;
+	}
+	
 	private static int _lastCodeVpageRead = 0;
 	private static int _lastCodeRpageRead = 0;
 	

@@ -139,7 +139,7 @@ public class MainUI {
 		this.frmDwarfMesaEngine.getContentPane().add(this.displayPanel, BorderLayout.CENTER);
 		
 		this.statusLine = new JLabel(" Mesa Engine not running");
-		this.statusLine.setFont(new Font("FreeMono", Font.BOLD, 12));
+		this.statusLine.setFont(new Font("Monospaced", Font.BOLD, 12));
 		this.frmDwarfMesaEngine.getContentPane().add(this.statusLine, BorderLayout.SOUTH);
 
 		this.setRunningState(RunningState.notRunning);
