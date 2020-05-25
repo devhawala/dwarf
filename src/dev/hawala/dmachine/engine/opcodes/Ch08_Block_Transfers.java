@@ -33,6 +33,7 @@ import dev.hawala.dmachine.engine.Config;
 import dev.hawala.dmachine.engine.Cpu;
 import dev.hawala.dmachine.engine.Mem;
 import dev.hawala.dmachine.engine.Opcodes.OpImpl;
+import dev.hawala.dmachine.engine.PilotDefs.DisplayType;
 import dev.hawala.dmachine.engine.PrincOpsDefs;
 import dev.hawala.dmachine.engine.Processes;
 
@@ -546,9 +547,12 @@ public class Ch08_Block_Transfers {
 			dstOp = (s,d) -> (d == 0) ? s : d;
 			break;
 			
-		case pixelXor:			
-		case srcXorDst:
+		case pixelXor:
 			dstOp = (s,d) -> ((s < 1 && d < 1) || (s > 0 && d > 0)) ? 0 : 1;
+			break;
+			
+		case srcXorDst:
+			dstOp = (s,d) -> s ^ d;
 			break;
 			
 		default:
@@ -858,7 +862,7 @@ public class Ch08_Block_Transfers {
 	 * by a word. Usage of this pattern type is triggered by the unpacked bit in the
 	 * BITBLTX resp. COLORBLT parameters.  
 	 */
-	private static class MonochromeUnpackedPatternPixelSource implements PixelSource {
+	private static class UnpackedPatternPixelSource implements PixelSource {
 		
 		private final int pixelsWidth; // pattern width in words = GrayParm.widthMinusOne + 1
 		
@@ -868,6 +872,8 @@ public class Ch08_Block_Transfers {
 		
 		private final int lpPatternStart; // long pointer to the true 1st word of the pattern
 		
+		private final boolean isMonochrome;
+		
 		private int yOffset; // current pattern line: [0..pixelsHeight)
 		
 		private int[] patternPixels = null; // loaded at first access => restartability
@@ -876,18 +882,20 @@ public class Ch08_Block_Transfers {
 		
 		private int baseIdx;
 		
-		public MonochromeUnpackedPatternPixelSource(
+		public UnpackedPatternPixelSource(
 				int argSrcWord,    // address of the 1st word at line yOffset(!) of the pattern
 				int argSrcBit,     // position of 1st pixel  to transfer on each line
 				int yOffset,       // as of reinterpreted arg.srcBpl
 				int widthMinusOne, // as of reinterpreted arg.srcBpl
-				int heightMinusOne // as of reinterpreted arg.srcBpl
+				int heightMinusOne,// as of reinterpreted arg.srcBpl
+				boolean monochrome // use the whole unpacked value or only 0/not-0?
 				) {
 			this.pixelsWidth = widthMinusOne + 1;
 			this.pixelsHeight = heightMinusOne + 1;
 			this.xOffset = argSrcBit % this.pixelsWidth;
 			this.lpPatternStart = argSrcWord - (yOffset * this.pixelsWidth);
 			this.yOffset = yOffset % this.pixelsHeight;
+			this.isMonochrome = monochrome;
 		}
 
 		@Override
@@ -896,7 +904,12 @@ public class Ch08_Block_Transfers {
 				int[] pixels = new int[this.pixelsWidth * this.pixelsHeight];
 				for (int i = 0; i < pixels.length; i++) {
 					short pixelValue = Mem.readWord(this.lpPatternStart + i);
-					pixels[i] = (pixelValue == 0) ? 0 : 1; // ?? condition; ((pixelValue & 0x8000) == 0 
+					System.out.printf("  -- UnpackedPatternPixelSource :: %s - pixelValue = 0x%04X\n", this.isMonochrome ? "mono" : "color", pixelValue);
+					if (this.isMonochrome) {
+						pixels[i] = (pixelValue == 0) ? 0 : 1; // ?? condition; ((pixelValue & 0x8000) == 0
+					} else {
+						pixels[i] = pixelValue;
+					}
 				}
 				this.patternPixels = pixels;
 				this.yOffset--;
@@ -929,14 +942,15 @@ public class Ch08_Block_Transfers {
 	}
 	
 	/**
-	 * Pixel source for a pattern having all bits in the same b/w color (either
-	 * all pixels black or all pixels white).
+	 * Pixel source for a pattern having all bits in the same color (either
+	 * all pixels black or all pixels white for an b/w display resp. a single
+	 * color index on a color display).
 	 */
-	private static class MonochromeUnipixelPatternSource implements PixelSource {
+	private static class UnipixelPatternSource implements PixelSource {
 		
 		private final int pixel;
 		
-		public MonochromeUnipixelPatternSource(int pixel) {
+		public UnipixelPatternSource(int pixel) {
 			this.pixel = pixel;
 		}
 
@@ -1203,34 +1217,30 @@ public class Ch08_Block_Transfers {
 		private void setupWorkers() {
 			boolean isBackward = (this.direction == Direction.backward);
 			
-			// begin fix strange target color setup where both colors are identical
-			// (so it would be filling with this color no matter of src/dst-bits/functions)
-			// (one such strange case is restoring the desktop background for the help icon in globalview 2.1)
-			if (this.colorMapping[0] == 0 && this.colorMapping[1] == 0) {
-				this.colorMapping[1] = 1;
-			} else if (this.colorMapping[0] != 0 && this.colorMapping[1] == this.colorMapping[0]) {
-				this.colorMapping[1] = 0;
-			}
-			// end fix strange target color setup
-			
 			if (this.pattern) {
 				boolean onePixel = (this.patWidthMinusOne == 0 && this.patHeightMinusOne == 0);
 				short w = Mem.readWord(this.srcWord);
-				if (onePixel && this.patUnpacked && w == 0) { // only bit 0 relevant?
-					this.pixelSource = new MonochromeUnipixelPatternSource(0);
+				if (onePixel && this.patUnpacked) {
+					if (this.srcType == PixelType.bit || Mem.getDisplayType() == DisplayType.monochrome) {
+						// monochrome source pattern
+						this.pixelSource = new UnipixelPatternSource((w == 0) ? 0 : 1);
+					} else {
+						// color source pattern
+						this.pixelSource = new UnipixelPatternSource(w);
+					}
 				} else if (onePixel && !this.patUnpacked && w == 0) {
-					this.pixelSource = new MonochromeUnipixelPatternSource(0);
-				} else if (onePixel && this.patUnpacked && w != 0) { // only bit 0 relevant?
-					this.pixelSource = new MonochromeUnipixelPatternSource(1);
+					this.pixelSource = new UnipixelPatternSource(0);
 				} else if (onePixel && !this.patUnpacked && w == (short)0xFFFF) {
-					this.pixelSource = new MonochromeUnipixelPatternSource(1);
+					this.pixelSource = new UnipixelPatternSource(1);
 				} else if (this.patUnpacked) {
-					this.pixelSource = new MonochromeUnpackedPatternPixelSource(
+					this.pixelSource = new UnpackedPatternPixelSource(
 							this.srcWord,            // argSrcWord
 							this.srcPixel,           // argSrcBit
 							this.patYOffset,         // yOffset
 							this.patWidthMinusOne,   // widthMinusOne
-							this.patHeightMinusOne); // heightMinusOne
+							this.patHeightMinusOne,  // heightMinusOne
+							this.srcType == PixelType.bit || Mem.getDisplayType() == DisplayType.monochrome // monochrome?
+							);
 				} else {
 					this.pixelSource = new MonochromePackedPatternPixelSource(
 							this.srcWord,            // argSrcWord
@@ -1257,14 +1267,7 @@ public class Ch08_Block_Transfers {
 					(this.dstType == PixelType.bit) ? 1 : Mem.getDisplayType().getBitDepth(), // bitsPerPixel
 					isBackward);    // backward
 			
-			PixelCombiner comb = getCombiner(this.srcFunc, this.dstFunc);
-			if (this.srcType == this.dstType) {
-				// both are bit or both are display:the combiner gives the result directly
-				this.combiner = comb;
-			} else {
-				// pixmap types are different => go through color mapping
-				this.combiner = (s,d) -> this.colorMapping[(comb.combine(s, d) == 0) ? 0 : 1];
-			}
+			this.combiner = getCombiner(this.srcFunc, this.dstFunc);
 			
 			this.remainingLines = this.height;
 		}
@@ -1277,6 +1280,11 @@ public class Ch08_Block_Transfers {
 		// transfer the pixels line per line, caching complete source and destination lines,
 		// with honoring pending interrupts between pixel lines.
 		public void execute() {
+			
+			// check if colortable mapping is needed for source and destination oixels
+			boolean mapSrcPixel = Mem.getDisplayType() != DisplayType.monochrome && this.srcType == PixelType.bit && this.srcFunc == SrcFunc.fnull;
+			boolean mapDstPixel = Mem.getDisplayType() != DisplayType.monochrome && this.dstType == PixelType.bit;
+			
 			while(this.remainingLines > 0) {
 				// prepare processing of this line (this may cause memory faults)
 				this.pixelSource.loadLineCache();
@@ -1284,11 +1292,16 @@ public class Ch08_Block_Transfers {
 				
 				// process pixels in the line
 				for (int i = 0; i < this.width; i++) {
-					int srcPixel = this.pixelSource.getCurrPixel();
-					int oldDstPixel = this.pixelSink.getCurrPixel();
+					
+					int srcPixel = (mapSrcPixel) 
+							? this.colorMapping[this.pixelSource.getCurrPixel()]
+							: this.pixelSource.getCurrPixel();
+					int oldDstPixel = (mapDstPixel) 
+							? this.colorMapping[this.pixelSink.getCurrPixel()]
+							: this.pixelSink.getCurrPixel();
 					
 					int newDstPixel = this.combiner.combine(srcPixel, oldDstPixel);
-					this.pixelSink.setCurrPixel(this.colorMapping[newDstPixel]);
+					this.pixelSink.setCurrPixel(newDstPixel);
 					
 					this.pixelSource.moveToNextPixel();
 					this.pixelSink.moveToNextPixel();
@@ -1349,9 +1362,9 @@ public class Ch08_Block_Transfers {
 			bitBltOp.execute();
 		} else if (Cpu.SP == 2) {
 			// restart: get id and restore stack for the case of another interruption
-			if (Config.LOG_BITBLT_INSNS && Config.dynLogBitblts) {
-				System.out.println("## restarted ...\n##");
-			}
+//			if (Config.LOG_BITBLT_INSNS && Config.dynLogBitblts) {
+//				System.out.println("## restarted ...\n##");
+//			}
 			int id = Cpu.popLong();
 			Cpu.SP = 2;
 			

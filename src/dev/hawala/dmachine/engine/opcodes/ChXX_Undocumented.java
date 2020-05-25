@@ -51,11 +51,13 @@ public class ChXX_Undocumented {
 		int startingVirtualPage = Cpu.popLong();
 		
 		// sanity checks
-		if (totalPageCount != pageCountInEachBlock) { Cpu.ERROR("MAPDISPLAY :: totalPageCount != pageCountInEachBlock"); }
 		if (startingRealPage != Mem.getDisplayRealPage()) { Cpu.ERROR("MAPDISPLAY :: startingRealPage != Mem.getDisplayRealPage()"); }
 		if (totalPageCount != Mem.getDisplayPageSize()) { Cpu.ERROR("MAPDISPLAY :: totalPageCount != Mem.getDisplayPageSize()"); }
 
-		Mem.mapDisplayMemory(startingVirtualPage);
+		// strange but this seems to be the right usage of the misleadingly named arguments (works both for 1-bit and 8-bit deep displays)...
+		int firstVirtualPage = startingVirtualPage + pageCountInEachBlock - totalPageCount;
+		
+		Mem.mapDisplayMemory(firstVirtualPage);
 	};
 	
 	/*

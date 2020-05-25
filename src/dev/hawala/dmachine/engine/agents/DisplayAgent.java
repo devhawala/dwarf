@@ -28,6 +28,7 @@ package dev.hawala.dmachine.engine.agents;
 
 import dev.hawala.dmachine.engine.Config;
 import dev.hawala.dmachine.engine.Mem;
+import dev.hawala.dmachine.engine.PilotDefs;
 import dev.hawala.dmachine.engine.PrincOpsDefs;
 
 /**
@@ -43,7 +44,7 @@ import dev.hawala.dmachine.engine.PrincOpsDefs;
  * arrives.
  * </p>
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2017)
+ * @author Dr. Hans-Walter Latz / Berlin (2017,2020)
  */
 public class DisplayAgent extends Agent {
 	
@@ -99,11 +100,35 @@ public class DisplayAgent extends Agent {
 	private static final int Pfm_or   = 2;
 	private static final int Pfm_xor  = 3;
 	
+	private final boolean isColorDisplay;
+	private final int[] colorTable;
+	
 	public DisplayAgent(int fcbAddress, MouseAgent mouseAgent) {
 		super(AgentDevice.displayAgent, fcbAddress, FCB_SIZE);
 		this.mouseAgent = mouseAgent;
 		
+		PilotDefs.DisplayType displayType = Mem.getDisplayType();
+		if (displayType == PilotDefs.DisplayType.monochrome) {
+			this.isColorDisplay = false;
+			this.colorTable = new int[2];
+			this.colorTable[0] = 0x00000000; // black
+			this.colorTable[1] = 0x00FFFFFF; // white
+		} else if (displayType == PilotDefs.DisplayType.byteColor) {
+			this.isColorDisplay = true;
+			this.colorTable = new int[256];
+			this.colorTable[0] = 0x00000000; // black
+			for (int i = 1; i < colorTable.length; i++) {
+				this.colorTable[1] = 0x00FFFFFF; // white
+			}
+		} else {
+			throw new IllegalArgumentException("Unsupported 'displayType' = " + displayType);
+		}
+		
 		this.enableLogging(Config.AGENTS_LOG_DISPLAY);
+	}
+	
+	public int[] getColorTable() {
+		return this.colorTable;
 	}
 
 	@Override
@@ -152,19 +177,44 @@ public class DisplayAgent extends Agent {
 	}
 	
 	private void setCLTEntry() {
-		logf("call() - setCLTEntry => status = readOnlyCLT\n");
-		this.setFcbWord(fcb_w_status, Status_readOnlyCLT);
+		int colorIndex = this.getFcbWord(fcb_w_colorIndex) & 0xFFFF;
+		int colorU0 = this.getFcbWord(fcb_w_color_u0) & 0xFFFF;
+		int colorU1 = this.getFcbWord(fcb_w_color_u1) & 0xFFFF;
+		
+		if (colorIndex >= this.colorTable.length) {
+			logf("call() - setCLTEntry , colorIndex = %d , u0 = 0x%04X , u1 = 0x%04X => status = Status_invalidCLTIndex   ++++++ invalid CLT index\n",
+				 colorIndex, colorU0, colorU1);
+			this.setFcbWord(fcb_w_status, Status_invalidCLTIndex);
+			return;
+		}
+		
+		int red = colorU0 & 0x00FF;
+		int green = (colorU0 >> 8) & 0x00FF;
+		int blue = colorU1 & 0x00FF;
+		
+		int tableValue = (red << 16) | (green << 8) | blue;
+		this.colorTable[colorIndex] = tableValue;
+		this.setFcbWord(fcb_w_status, Status_success);
+
+		logf("call() - setCLTEntry , colorIndex = %d , (r,g,b) = 0x ( %02X , %02X , %02X ) => status = Status_success\n",
+			 colorIndex, red, green, blue);
 	}
 	
 	private void getCLTEntry() {
-		int colorIndex = this.getFcbWord(fcb_w_colorIndex);
+		int colorIndex = this.getFcbWord(fcb_w_colorIndex) & 0xFFFF;
 		logf("call() - getCLTEntry , colorIndex = %d\n", colorIndex);
-		if (colorIndex > 1) {
-			this.setFcbWord(fcb_w_status, Status_readOnlyCLT);
+		if (colorIndex > this.colorTable.length) {
+			this.setFcbWord(fcb_w_status, Status_invalidCLTIndex);
 			return;
 		}
-		this.setFcbWord(fcb_w_color_u0, 0xFFFF);
-		this.setFcbWord(fcb_w_color_u1, 0xFF00);
+		
+		int tableValue = this.colorTable[colorIndex];
+		int red = (tableValue >> 16) & 0x0000FF;
+		int green = (tableValue >> 8) & 0x0000FF;
+		int blue = tableValue & 0x0000FF;
+		
+		this.setFcbWord(fcb_w_color_u0, (green << 8) | red);
+		this.setFcbWord(fcb_w_color_u1, blue);
 		this.setFcbWord(fcb_w_status, Status_success);
 	}
 	
@@ -219,7 +269,9 @@ public class DisplayAgent extends Agent {
 		int h = this.getFcbWord(fcb_w_destRectanle_height);
 		logf("call() - updateRectangle x = %d , y = %d , width = %d , height = %d\n", x, y, w, h);
 		
-		// TODO: implement
+		// TODO: implement more precise version?
+		Mem.setDisplayMemoryDirty();
+		logf("call() - updateRectangle => invalidated whole display memory\n");
 		
 		this.setFcbWord(fcb_w_status, Status_success);
 	}

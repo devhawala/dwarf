@@ -233,6 +233,8 @@ public class TestUiDataConsumer implements iUiDataConsumer, Runnable {
 		int mouseCursorIndex = 0;
 		int currentMP = 0;
 		
+		int[] colorTable = { 0x00000000 , 0x00FFFFFF };
+		
 		boolean firstRefresh = true;
 		
 		while(true) {
@@ -257,7 +259,8 @@ public class TestUiDataConsumer implements iUiDataConsumer, Runnable {
 							displayMemStart,
 							this.displayMem.length - displayMemStart,
 							this.memFlags,
-							this.firstDisplayPage);
+							this.firstDisplayPage,
+							colorTable);
 					
 					if (newMP != currentMP) {
 						currentMP = newMP;

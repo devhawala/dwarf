@@ -64,7 +64,7 @@ public class MainUI {
 	private final int displayHeight;
 	
 	private JToolBar toolBar;
-	private DisplayBwPane displayPanel;
+	private DisplayPane displayPanel;
 	private JLabel statusLine;
 	private JCheckBox ckReadOnlyFloppy;
 	private JButton btnStart;
@@ -81,16 +81,17 @@ public class MainUI {
 	 * @param displayWidth the pixel width of the mesa display
 	 * @param displayHeight the pixel height of the mesa display
 	 * @param resizable should the top level window be resizable?
+	 * @param colorDisplay is this a color (8-bit color lookup table) display machine?
 	 */
-	public MainUI(String title, int displayWidth, int displayHeight, boolean resizable) {
+	public MainUI(String title, int displayWidth, int displayHeight, boolean resizable, boolean colorDisplay) {
 		this.title = title;
 		this.displayWidth = displayWidth;
 		this.displayHeight = displayHeight;
-		initialize(resizable);
+		initialize(resizable, colorDisplay);
 	}
 
 	// Initialize the contents of the frame.
-	private void initialize(boolean resizable) {
+	private void initialize(boolean resizable, boolean colorDisplay) {
 		this.frmDwarfMesaEngine = new JFrame();
 		this.frmDwarfMesaEngine.setTitle("Dwarf Mesa Engine - " + this.title);
 		this.frmDwarfMesaEngine.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
@@ -130,7 +131,9 @@ public class MainUI {
 		this.lblFloppyFilename.setFont(new Font("Dialog", Font.PLAIN, 12));
 		this.toolBar.add(lblFloppyFilename);
 		
-		this.displayPanel = new DisplayBwPane(this.displayWidth, this.displayHeight);
+		this.displayPanel = (colorDisplay)
+				? new Display8BitColorPane(this.displayWidth, this.displayHeight)
+				: new DisplayMonochromePane(this.displayWidth, this.displayHeight);
 		this.displayPanel.setBackground(Color.WHITE);
 		Dimension dims = new Dimension(this.displayWidth, this.displayHeight);
 		this.displayPanel.setMinimumSize(dims);
@@ -157,7 +160,7 @@ public class MainUI {
 	/**
 	 * @return the pane showing the mesa display 
 	 */
-	public DisplayBwPane getDisplayPane() { return this.displayPanel; }
+	public DisplayPane getDisplayPane() { return this.displayPanel; }
 	
 	/**
 	 * Set the text displayed in the status area
@@ -261,7 +264,7 @@ public class MainUI {
 			public void run() {
 				try {
 					if (!allowMainStartup) { return; }
-					MainUI window = new MainUI("this is a test", 1024, 640, true);
+					MainUI window = new MainUI("this is a test", 1024, 640, true, false);
 					window.frmDwarfMesaEngine.setVisible(true);
 				} catch (Exception e) {
 					e.printStackTrace();

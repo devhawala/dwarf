@@ -28,6 +28,8 @@ package dev.hawala.dmachine.engine;
 
 import java.security.InvalidParameterException;
 
+import dev.hawala.dmachine.engine.PilotDefs.DisplayType;
+
 /**
  * Implementation of the mesa engine real and virtual memory including
  * display memory in mesa megine address space.
@@ -93,6 +95,9 @@ public class Mem {
 		if ((displayWidth % 16) != 0) {
 			throw new InvalidParameterException("Requested displayWidth not a multiple of 16");
 		}
+		if (displayType != PilotDefs.DisplayType.monochrome && displayType != PilotDefs.DisplayType.byteColor) {
+			throw new IllegalArgumentException("Unsupported 'displayType' = " + displayType);
+		}
 		
 		// Real mem: min. 1024 pages .. max. 32768 pages (512 Kbyte .. 16 MByte)
 		addressBitsReal = Math.max(PrincOpsDefs.MIN_REAL_ADDRESSBITS,  Math.min(addrBitsReal, PrincOpsDefs.MAX_REAL_ADDRESSBITS));
@@ -101,6 +106,7 @@ public class Mem {
 		addressBitsVirtual = Math.min(PrincOpsDefs.MAX_VIRTUAL_ADDRESSBITS, Math.max(addrBitsVirtual, addressBitsReal));
 		
 		// additional real memory required for display
+		//int pixelsPerWord = (displayType == PilotDefs.DisplayType.monochrome) ? PrincOpsDefs.WORD_BITS : 2;
 		int displayMemoryNeededWords
 				= (((displayWidth * displayType.getBitDepth()) + PrincOpsDefs.WORD_BITS - 1)
 				/ PrincOpsDefs.WORD_BITS)
@@ -128,7 +134,11 @@ public class Mem {
 		
 		// initialize virtual and display memory
 		createInitialPageMapping();
-		initializeDisplayMemory();
+		if (activeDisplayType == PilotDefs.DisplayType.monochrome) {
+			initializeDisplayMemory();
+		} else {
+			initializeColorDisplayMemory();
+		}
 	}
 	
 	public static void createInitialPageMapping() {
@@ -217,6 +227,37 @@ public class Mem {
 			}
 			ti++;
 			if (ti >= template.length) { ti = 0; }
+		}
+	}
+	
+	private static void initializeColorDisplayMemory() {
+		int[] template = {
+			0x0100 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0001 ,
+			0x0001 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0100 ,
+			0x0000 , 0x0100 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0001 , 0x0000 ,
+			0x0000 , 0x0001 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0100 , 0x0000 ,
+			0x0000 , 0x0000 , 0x0100 , 0x0000 , 0x0000 , 0x0001 , 0x0000 , 0x0000 ,
+			0x0000 , 0x0000 , 0x0001 , 0x0000 , 0x0000 , 0x0100 , 0x0000 , 0x0000 ,
+			0x0000 , 0x0000 , 0x0000 , 0x0100 , 0x0001 , 0x0000 , 0x0000 , 0x0000 ,
+			0x0000 , 0x0000 , 0x0000 , 0x0001 , 0x0100 , 0x0000 , 0x0000 , 0x0000 ,
+			0x0000 , 0x0000 , 0x0000 , 0x0001 , 0x0100 , 0x0000 , 0x0000 , 0x0000 ,
+			0x0000 , 0x0000 , 0x0000 , 0x0100 , 0x0001 , 0x0000 , 0x0000 , 0x0000 ,
+			0x0000 , 0x0000 , 0x0001 , 0x0000 , 0x0000 , 0x0100 , 0x0000 , 0x0000 ,
+			0x0000 , 0x0000 , 0x0100 , 0x0000 , 0x0000 , 0x0001 , 0x0000 , 0x0000 ,
+			0x0000 , 0x0001 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0100 , 0x0000 ,
+			0x0000 , 0x0100 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0001 , 0x0000 ,
+			0x0001 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0100 ,
+			0x0100 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0001	
+		};
+		int displayWord = mem.length - (displayPageSize * PrincOpsDefs.WORDS_PER_PAGE);
+		int wordsPerLine = displayPixelWidth / 2;
+		int tl = 0;
+		for (int i = 0; i < displayPixelHeight; i++) {
+			for (int j = 0; j < wordsPerLine; j++) {
+				mem[displayWord++] = (short)template[ tl + (displayWord % 8) ];
+			}
+			tl += 8;
+			if (tl >= template.length) { tl = 0; }
 		}
 	}
 	
@@ -663,11 +704,12 @@ public class Mem {
 	}
 	
 	/*
-	 * display mapping
+	 * display mapping and access
 	 */
 	
 	private static int vDisplayFrom = 0;
-	private static int vDisplayTo = 0; 
+	private static int vDisplayTo = 0;
+	private static int pixelsPerWord = 1;
 	private static int displayWordsPerLine = 1;
 	
 	public static void mapDisplayMemory(int toVirtualPage) {
@@ -684,7 +726,8 @@ public class Mem {
 		
 		vDisplayFrom = displayFirstMappedVirtualPage * PrincOpsDefs.WORDS_PER_PAGE;
 		vDisplayTo = (displayFirstMappedVirtualPage + displayPageSize) * PrincOpsDefs.WORDS_PER_PAGE;
-		displayWordsPerLine = displayPixelWidth / 16;
+		pixelsPerWord = (activeDisplayType == DisplayType.byteColor) ? 2 : 16;
+		displayWordsPerLine = displayPixelWidth / pixelsPerWord;
 		
 //		System.out.printf("## mapDisplayMemory => vDisplayFrom = 0x%08X, vDisplayTo = 0x%08X, displayWordsPerLine = %d\n", 
 //				vDisplayFrom, vDisplayTo, displayWordsPerLine);
@@ -696,15 +739,15 @@ public class Mem {
 	
 	public static int getDisplayY(int vAddr, int pixelOffset) {
 		if (!isInDisplayMemory(vAddr)) { return -1; }
-		int wordOffset = (vAddr - vDisplayFrom) + (pixelOffset / 16);
+		int wordOffset = (vAddr - vDisplayFrom) + (pixelOffset / pixelsPerWord);
 		return wordOffset  / displayWordsPerLine;
 	}
 	
 	public static int getDisplayX(int vAddr, int pixelOffset) {
 		if (!isInDisplayMemory(vAddr)) { return -1; }
-		int wordOffset = (vAddr - vDisplayFrom) + (pixelOffset / 16);
+		int wordOffset = (vAddr - vDisplayFrom) + (pixelOffset / pixelsPerWord);
 		wordOffset -= (wordOffset  / displayWordsPerLine) * displayWordsPerLine; 
-		return (wordOffset * 16) + (pixelOffset % 16);
+		return (wordOffset * pixelsPerWord) + (pixelOffset % pixelsPerWord);
 	}
 	
 	public static short[] getDisplayRealMemory() {
@@ -735,6 +778,13 @@ public class Mem {
 	
 	public static int getDisplayPixelHeight() {
 		return displayPixelHeight;
+	}
+	
+	public static void setDisplayMemoryDirty() {
+		if (displayFirstMappedVirtualPage == 0) { return; } // display memory yet not mapped
+		for (int i = 0; i < displayPageSize; i++) {
+			setVPageFlags(displayFirstMappedVirtualPage + i, PrincOpsDefs.MAPFLAGS_DIRTY);
+		}
 	}
 	
 	public static void resetDisplayPagesFlags() {

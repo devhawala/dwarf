@@ -39,11 +39,9 @@ import java.util.List;
 
 import javax.swing.JComponent;
 
-import dev.hawala.dmachine.engine.PrincOpsDefs;
-
 /**
- * Java swing pane representing the screen of a Dwarf machine, providing
- * a Black&amp;White display of configurable size including a 16x16 pixel mouse
+ * Abstract Java swing pane representing the screen of a Dwarf machine, providing
+ * a generic display of configurable size including a 16x16 pixel mouse
  * pointer with modifiable shape.
  * <p>
  * The pane takes a double buffering approach for the display bitmap, using
@@ -58,15 +56,15 @@ import dev.hawala.dmachine.engine.PrincOpsDefs;
  * re-using already defined cursor shapes.
  * </p>
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2017)
+ * @author Dr. Hans-Walter Latz / Berlin (2017,2020)
  */
-public class DisplayBwPane extends JComponent {
+public abstract class DisplayPane extends JComponent {
 	
-	private static final long serialVersionUID = 8238134602921644866L;
-	
-	// buffer image as backing store for the bitmap currently display and
-	// for transfer from mesa memory to java display
-	private final BufferedImage bi;
+	private static final long serialVersionUID = 4816229134273103459L;
+
+	// buffer image as backing store for the bitmap currently displayed and
+	// used for pseudo-regular transfer from mesa memory to java display
+	protected final BufferedImage bi;
 	
 	// custom cursor construction support
 	private final BufferedImage cursorBits;
@@ -82,12 +80,12 @@ public class DisplayBwPane extends JComponent {
 	 * @param displayWidth pixel width of the mesa display.
 	 * @param displayHeight pixel height of the mesa display. 
 	 */
-	public DisplayBwPane(int displayWidth, int displayHeight) {
+	public DisplayPane(int displayWidth, int displayHeight) {
 		// create the bitmap backing store
-		this.bi = new BufferedImage(displayWidth, displayHeight, BufferedImage.TYPE_BYTE_BINARY);;
+		this.bi = this.createBackingImage(displayWidth, displayHeight);
 		
 		// prevent the tab key to swallowed (more precisely used by focus management)
-		// so we tab key (de)pressed event can be passed to the mesa machine
+		// so a tab key (de)pressed event can be passed to the mesa machine
 		this.setFocusTraversalKeysEnabled(false);
 		
 		// get the environments cursor geometry characteristics, assuming the cursor square
@@ -129,7 +127,7 @@ public class DisplayBwPane extends JComponent {
 	}
 	
 	// cursor cache class
-	// a single cursor is identified by a hascode computed over the
+	// a single cursor is identified by an hashcode computed over the
 	// cursor bits and the hotspot position
 	private static class CachedCursor {
 		
@@ -233,6 +231,19 @@ public class DisplayBwPane extends JComponent {
 		this.setCursor(newCursor);
 	}
 	
+	/*
+	 * ******* abstract methods to be implemented by real display panes
+	 */
+	
+	/**
+	 * Create the {@code BufferedImage} of the given size backing the display for the
+	 * color type of the specific instance (called once by the constructor).
+	 * 
+	 * @param displayWidth pixel width of the mesa display.
+	 * @param displayHeight pixel height of the mesa display. 
+	 */
+	protected abstract BufferedImage createBackingImage(int displayWidth, int displayHeight);
+	
 	/**
 	 * Copy modified pages from the real memory of the mesa engine into the bitmap
 	 * backing store for this Dwarf display. 
@@ -244,36 +255,11 @@ public class DisplayBwPane extends JComponent {
 	 *   memory page was modified, allowing to copy only modified pages from mesa memory space.
 	 * @param firstPage index of the first entry in {@code pageFlags} to use, corresponding
 	 *   to the {@code start} index.
+	 * @param colorTable mapping of pixel values to color values as array of {@code 0x00rrggbb} color values
 	 * @return {@code true} if the backing store of the display bitmap was modifiied, i.e. if
 	 *   any of the pageFlags signaled that the mesa display was modified, thus a repaint of
 	 *   the Java-UI should be initiated.
 	 */
-	public boolean copyDisplayContent(short[] mem, int start, int count, short[] pageFlags, int firstPage) {
-		DataBufferByte dbb = (DataBufferByte)bi.getRaster().getDataBuffer();
-		byte[] data = dbb.getData();
-		
-		boolean bitmapWasUpdated = false;
-		int end = start + Math.min(Math.min(count, data.length / 2), mem.length - start);
-		int bitmapIdx = 0;
-		int memIdx = start;
-		int pageIdx = firstPage;
-		int pageCount = (count + PrincOpsDefs.WORDS_PER_PAGE - 1) / PrincOpsDefs.WORDS_PER_PAGE;
-		while (pageCount-- > 0) {
-			short flags = pageFlags[pageIdx++];
-			if ((flags & PrincOpsDefs.MAPFLAGS_DIRTY) == 0) {
-				memIdx += PrincOpsDefs.WORDS_PER_PAGE;
-				bitmapIdx += PrincOpsDefs.WORDS_PER_PAGE * 2;
-				continue;
-			}
-			for (int i = 0; i < PrincOpsDefs.WORDS_PER_PAGE && memIdx < end; i++) {
-				short w = (short)(mem[memIdx++] ^ 0xFFFF); // TODO: really invert manually ??
-				data[bitmapIdx++] = (byte)((w >>> 8));
-				data[bitmapIdx++] = (byte)((w & 0x00FF));
-			}
-			bitmapWasUpdated = true;
-		}
-		
-		return bitmapWasUpdated;
-	}
+	public abstract boolean copyDisplayContent(short[] mem, int start, int count, short[] pageFlags, int firstPage, int[] colorTable) ;
 
 }

@@ -122,6 +122,17 @@ public class Agents {
 	public static iUiDataConsumer getUiCallbacks() {
 		return new UiCallbacks();
 	}
+	
+
+	/**
+	 * Retrieve the display color table
+	 * 
+	 * @return the color table, each table entry as {@code 0x00rrggbb}, indexed by the pixel
+	 * 		value in the display bitmap.
+	 */
+	public static int[] getDisplayColorTable() {
+		return displayAgent.getColorTable();
+	}
 
 	/**
 	 * Initialize the agents and setup the FCB area of the mesa engine.

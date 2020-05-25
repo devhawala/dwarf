@@ -102,6 +102,7 @@ public class Dwarf {
 	private static int addressBitsReal = 22;
 	private static int displayWidth = DEFAULT_DISPLAY_WIDTH;
 	private static int displayHeight = DEFAULT_DISPLAY_HEIGHT;
+	private static boolean displayTypeColor = false;
 	private static String switches = DEFAULT_SWITCHES;
 	private static int[] macBytes = new int[6];
 	private static int[] macWords = new int[3];
@@ -244,6 +245,7 @@ public class Dwarf {
 		addressBitsReal = props.getInt("addressBitsReal", addressBitsReal);
 		displayWidth = props.getInt("displayWidth", displayWidth);
 		displayHeight = props.getInt("displayHeight", displayHeight);
+		displayTypeColor = props.getBoolean("displayTypeColor", displayTypeColor);
 		switches = props.getString("switches", switches);
 		title = props.getString("title", bootFile);
 		oldDeltasToKeep = props.getInt("oldDeltasToKeep", oldDeltasToKeep);
@@ -300,7 +302,7 @@ public class Dwarf {
 		System.out.printf(" deltas limit: %d\n", oldDeltasToKeep);
 		System.out.printf(" bits virtual: %d\n", addressBitsVirtual);
 		System.out.printf(" bits real   : %d\n", addressBitsReal);
-		System.out.printf(" display     : w( %d ) x h( %d )\n", displayWidth, displayHeight);
+		System.out.printf(" display     : w( %d ) x h( %d ) - %s display\n", displayWidth, displayHeight, displayTypeColor ? "color" : "b/w");
 		System.out.printf(" keyboardMap : %s\n", (keyboardMapFile != null) ? keyboardMapFile : "");
 		System.out.printf(" xeroxCtrlKey: 0x%08X\n", xeroxControlKeyCode);
 		System.out.printf(" resetKeysOnF: %s\n", (resetKeysOnFocusLost)  ? "yes" : "no");
@@ -396,7 +398,7 @@ public class Dwarf {
 			// initialize the memory subsystem with the configured display configuration
 			Mem.initializeMemory(
 					addressBitsVirtual, addressBitsReal,
-					PilotDefs.DisplayType.monochrome,
+					(displayTypeColor) ? PilotDefs.DisplayType.byteColor : PilotDefs.DisplayType.monochrome,
 					displayWidth, displayHeight);
 			
 			// initialize the opcodes dispatch engine for the new princops (mds relieved),
@@ -431,7 +433,7 @@ public class Dwarf {
 		EventQueue.invokeLater(() -> {	
 			try {	
 				// setup the ui main window
-				window = new MainUI(title, displayWidth, displayHeight, true); // TODO: make resizable a program/configuration parameter?
+				window = new MainUI(title, displayWidth, displayHeight, true, displayTypeColor); // TODO: make resizable a program/configuration parameter?
 				window.getFrame().setVisible(true);
 				
 				// attach the mouse and keyboard handlers (java-ui => mesa engine) 

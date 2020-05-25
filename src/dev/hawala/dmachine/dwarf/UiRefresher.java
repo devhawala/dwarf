@@ -166,12 +166,13 @@ public class UiRefresher implements ActionListener, iMesaMachineDataAccessor, Po
 
 	// invoked by the mesa engine when it is opportune to transfer the display memory content to Java space
 	@Override
-	public void accessRealMemory(short[] realMemory, int memOffset, int memWords, short[] pageFlags, int firstPage) {
+	public void accessRealMemory(short[] realMemory, int memOffset, int memWords, short[] pageFlags, int firstPage, int[] colorTable) {
 		synchronized(this) {
 			if (!this.doRefreshUi) { return; }
 			this.doRepaint = this.mainWindow.getDisplayPane().copyDisplayContent(
 					realMemory,	memOffset, memWords,
-					pageFlags,	firstPage);
+					pageFlags,	firstPage,
+					colorTable);
 		}
 	}
 

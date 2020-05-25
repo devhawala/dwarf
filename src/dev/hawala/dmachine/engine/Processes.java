@@ -897,7 +897,8 @@ public class Processes {
 					Mem.getDisplayRealPage() * PrincOpsDefs.WORDS_PER_PAGE, 
 					Mem.getDisplayPageSize() * PrincOpsDefs.WORDS_PER_PAGE,
 					vPageFlags,
-					Mem.displayFirstMappedVirtualPage
+					Mem.displayFirstMappedVirtualPage,
+					Agents.getDisplayColorTable()
 					);
 				Mem.resetDisplayPagesFlags();
 			}

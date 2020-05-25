@@ -37,7 +37,7 @@ like Dandelion (8000 system) or Dove (6085 system):
 
 - virtual memory in exponential increments from real memory size up to 32768 kwords (64 MiB)
 
-- black&white bitmapped display, rendered in a Java Swing window
+- black&white or (8-bit) color bitmapped display, rendered in a Java Swing window
 
 - keyboard
 
@@ -151,6 +151,14 @@ _optional, default_: `1024`
 - `displayHeight`  
 the height of the mesa machine display in pixels  
 _optional, default_: `640`
+
+- `displayTypeColor`    
+boolean specifying the display mode for Dwarf: the value `false` specifies a monochrome
+display (default), while `true` specifies the display as 8-bit deep color display
+(with a color lookup table controlled by the mesa machine);    
+setting this option to `true` is intended for running GVWin 2.1, although the Dawn/XDE disk
+also works with color mode (not showing any colors however)    
+_optional, default_: `false`
 
 - `keyboardMapFile`  
 the name of the keyboard mapping file to use; see the syntax description at the
@@ -419,6 +427,48 @@ Therefore no option to choose the "old" global frame architecture is available.
 the misinterpretation of the princops regarding handling the bit-addresses in BITBLT/COLORBLT
 instructions when direction is 'reverse', along with smaller flaws preventing the correct rendering
 of the help icon in GlobalView)
+
+### Development history
+
+- 2020-05-25    
+added color display support, allowing to run GVWin 2.1 in 8-bit color mode
+
+- 2020-05-23    
+implemented some of the floating point instructions, changed status line font for better
+rendering on linux-mint
+
+- 2019-05-01    
+fixes for BITBLT/COLORBLT, fixes for smaller flaws preventing the correct rendering of the help
+icon in GlobalView
+
+- 2019-04-26    
+bugfix to instructions BYTEBLT and BYTEBLTR, utility program CnvDmk2Imd.java
+for converting DMK floppy image to IMD format
+
+- 2018-09-16    
+added network support by reworking the NetworkAgent for interfacing the
+NetHub of Dodo Services and use an internal time service if networking is disabled
+
+- 2018-07-17    
+added the "-merge" command line parameter (for merging the delta file into the harddisk image file)
+
+- 2018-07-14    
+fixes for legacy floppies (reject DOS floppies,
+improved compatibility with more DMK-/IMD-imaging tools)
+
+- 2018-07-08    
+added support for reading IMD and DMK legacy floppies
+
+- 2018-06-26    
+keyboard improvements
+
+- 2018-01-09    
+made the modifier key for generating special xerox keys configurable,
+added experimental internal time server
+
+- 2017-12-04    
+initial commit to github: First release for Dwarf, able to run Dawn/XDE and GVWin 2.1 as
+standalone machines
 
 ### Bibliography
 The following documents available in the internet were useful for creating Dwarf and its mesa engine:
