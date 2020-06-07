@@ -67,10 +67,11 @@ public class Mem {
 	private static int lastRealPage;
 	
 	// display memory characteristics
-	private static int displayPixelWidth;
-	private static int displayPixelHeight;
-	private static int displayPageSize;
-	static int displayFirstMappedVirtualPage; // package-level to allow class Processes to access it
+	private static int effectivePixelsPerLine; // pixels on a scan line in memory
+	private static int displayPixelWidth;      // pixels on a scan line displayed
+	private static int displayPixelHeight;     // number of vertical scan lines
+	private static int displayPageSize;        // total number of pages for the display memory
+	static int displayFirstMappedVirtualPage;  // (package-level to allow class Processes to access it)
 	
 	/*
 	 * memory setup at machine start
@@ -105,10 +106,15 @@ public class Mem {
 		// Virtual mem: min. real-pages .. max. 131072 pages (real-mem .. 64 MByte)
 		addressBitsVirtual = Math.min(PrincOpsDefs.MAX_VIRTUAL_ADDRESSBITS, Math.max(addrBitsVirtual, addressBitsReal));
 		
+		// Pilot/BWS seems to use multiple of 512 pixels per line for bytecolor
+		// which is the number of pixels pas memory page (2 pixels / word => 1 page == 512 pixels)
+		effectivePixelsPerLine = (displayType == PilotDefs.DisplayType.monochrome)
+				? displayWidth
+				: ((displayWidth + 511) / 512) * 512;
+		
 		// additional real memory required for display
-		//int pixelsPerWord = (displayType == PilotDefs.DisplayType.monochrome) ? PrincOpsDefs.WORD_BITS : 2;
 		int displayMemoryNeededWords
-				= (((displayWidth * displayType.getBitDepth()) + PrincOpsDefs.WORD_BITS - 1)
+				= (((effectivePixelsPerLine * displayType.getBitDepth()) + PrincOpsDefs.WORD_BITS - 1)
 				/ PrincOpsDefs.WORD_BITS)
 				* displayHeight;
 		displayPageSize = (displayMemoryNeededWords + PrincOpsDefs.WORDS_PER_PAGE - 1) / PrincOpsDefs.WORDS_PER_PAGE;
@@ -250,7 +256,7 @@ public class Mem {
 			0x0100 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0001	
 		};
 		int displayWord = mem.length - (displayPageSize * PrincOpsDefs.WORDS_PER_PAGE);
-		int wordsPerLine = displayPixelWidth / 2;
+		int wordsPerLine = effectivePixelsPerLine / 2;
 		int tl = 0;
 		for (int i = 0; i < displayPixelHeight; i++) {
 			for (int j = 0; j < wordsPerLine; j++) {
@@ -727,7 +733,7 @@ public class Mem {
 		vDisplayFrom = displayFirstMappedVirtualPage * PrincOpsDefs.WORDS_PER_PAGE;
 		vDisplayTo = (displayFirstMappedVirtualPage + displayPageSize) * PrincOpsDefs.WORDS_PER_PAGE;
 		pixelsPerWord = (activeDisplayType == DisplayType.byteColor) ? 2 : 16;
-		displayWordsPerLine = displayPixelWidth / pixelsPerWord;
+		displayWordsPerLine = effectivePixelsPerLine / pixelsPerWord;
 		
 //		System.out.printf("## mapDisplayMemory => vDisplayFrom = 0x%08X, vDisplayTo = 0x%08X, displayWordsPerLine = %d\n", 
 //				vDisplayFrom, vDisplayTo, displayWordsPerLine);

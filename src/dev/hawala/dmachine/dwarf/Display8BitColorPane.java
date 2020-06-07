@@ -45,8 +45,18 @@ public class Display8BitColorPane extends DisplayPane {
 
 	private static final long serialVersionUID = 1679737299827954144L;
 
+	// number of pixels in a memory page:
+	// with 8-bit color display data having 2 pixels per mesa word
+	private static final int PIXELS_PER_PAGE = PrincOpsDefs.WORDS_PER_PAGE * 2;
+	
+	// Pilot/BWS does have "line breaks" in a display page for 8-bit colors,
+	// so a scanline is a multiple of pages => multiple of 512 pixels
+	private static int getEffectiveWidth(int displayWidth) {
+		return ((displayWidth + PIXELS_PER_PAGE - 1) / PIXELS_PER_PAGE) * PIXELS_PER_PAGE;
+	}
+
 	public Display8BitColorPane(int displayWidth, int displayHeight) {
-		super(displayWidth, displayHeight);
+		super(getEffectiveWidth(displayWidth), displayHeight);
 	}
 
 	@Override

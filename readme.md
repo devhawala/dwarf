@@ -155,7 +155,7 @@ _optional, default_: `640`
 - `displayTypeColor`    
 boolean specifying the display mode for Dwarf: the value `false` specifies a monochrome
 display (default), while `true` specifies the display as 8-bit deep color display
-(with a color lookup table controlled by the mesa machine);    
+(with a color lookup table controlled by the OS running in the mesa machine);    
 setting this option to `true` is intended for running GVWin 2.1, although the Dawn/XDE disk
 also works with color mode (not showing any colors however)    
 _optional, default_: `false`
@@ -430,7 +430,7 @@ of the help icon in GlobalView)
 
 ### Development history
 
-- 2020-05-25    
+- 2020-05-25, 2020-06-07    
 added color display support, allowing to run GVWin 2.1 in 8-bit color mode
 
 - 2020-05-23    
