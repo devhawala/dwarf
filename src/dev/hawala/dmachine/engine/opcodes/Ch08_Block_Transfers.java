@@ -1168,6 +1168,16 @@ public class Ch08_Block_Transfers {
 				Cpu.logf("++     dstFunc = " + this.dstFunc);
 				Cpu.logf("++ colorMapping[0] = %d , colorMapping[1] = %d\n\n", this.colorMapping[0], this.colorMapping[1]);
 			}
+
+			// Bug in VP 2.x:
+			// - PrincOps 4.0 says at page 8-11: if direction is backward then srcPpl and dstPpl must be negative
+			// - but VP 2.x does:
+			//     direction is backward but both values are positive, e.g. leading to a write fault when fullscreen-ing a window, as the src
+			//     and dst pointers seem to point to the start (and not the end) and going backward from there gets us before the bitmap
+			// => special work around: treat this situation as direction forward as it appears to be meant this way by VP... (and screen looks OK)
+			if (this.direction == Direction.backward && this.dstPpl > 0 && this.srcPpl > 0) {
+				this.direction = Direction.forward;
+			}
 			
 			this.setupWorkers();
 			

@@ -188,7 +188,7 @@ public class FloppyAgent extends Agent {
 		private boolean changed = false;
 		
 		private void logf(String template, Object... args) {
-			if (Config.AGENTS_LOG_FLOPPY) {
+			if (Config.IO_LOG_FLOPPY) {
 				System.out.printf("FloppyFile[" + f.getName() + "]: " + template, args);
 			}
 		}
@@ -471,7 +471,7 @@ public class FloppyAgent extends Agent {
 		protected int dataWordsPerSector;
 		
 		protected void logf(String template, Object... args) {
-			if (Config.AGENTS_LOG_FLOPPY) {
+			if (Config.IO_LOG_FLOPPY) {
 				System.out.printf(template, args);
 			}
 		}
@@ -1196,7 +1196,7 @@ public class FloppyAgent extends Agent {
 	
 	public FloppyAgent(int fcbAddress) {
 		super(AgentDevice.floppyAgent, fcbAddress, FCB_SIZE);
-		this.enableLogging(Config.AGENTS_LOG_FLOPPY);
+		this.enableLogging(Config.IO_LOG_FLOPPY);
 	}
 	
 	@Override

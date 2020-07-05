@@ -209,7 +209,7 @@ public class NetworkAgent extends Agent {
 	
 	public NetworkAgent(int fcbAddress) {
 		super(AgentDevice.networkAgent, fcbAddress, FCB_SIZE);
-		this.enableLogging(Config.AGENTS_LOG_NETWORK);
+		this.enableLogging(Config.IO_LOG_NETWORK);
 		
 		if (hubHostname != null && !hubHostname.isEmpty()
 			&& hubPort > 0 && hubPort < 0xFFFF) {

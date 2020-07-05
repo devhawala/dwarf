@@ -51,13 +51,10 @@ public interface iMesaMachineDataAccessor {
 	 * @param memWords the length in addressable words of the display memory
 	 * @param pageFlags the virtual page map used by the mesa engine
 	 * @param firstPage index of the virtual page for {@code memOffset} in {@code pageFlags}
-	 * @param colorTable mapping of pixel values to colors, irrelevant for B/W display; the {@code int}-values
-	 * 			are: {@code 0x00rrggbb}
 	 */
 	void accessRealMemory(
 			short[] realMemory, int memOffset, int memWords,
-			short[] pageFlags, int firstPage,
-			int[] colorTable);
+			short[] pageFlags, int firstPage);
 	
 	/**
 	 * Callback informing the UI of a value change on the Maintenance Panel.

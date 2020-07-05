@@ -88,7 +88,7 @@ public class Ch03_MemoryOrganizationTest extends AbstractInstructionTest {
 	
 	@After
 	public void postTest() {
-		Mem.createInitialPageMapping();
+		Mem.createInitialPageMappingGuam();
 	}
 
 	@Test

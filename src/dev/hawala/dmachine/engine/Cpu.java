@@ -261,21 +261,22 @@ public class Cpu {
 	public static short WDC = 0;
 	
 	// interval timer register
-	// => resolution of this implementation: 64 microseconds <- System.nanoSecs() with lower 16 bits cut off
-	// => 512 IT-steps increment PTC in 32 ms (OK for PrincOps: between cTickMin = 15 and cTickMax = 60 as required)
-	public static final int MicrosecondsPerPulse = 64;
-	public static final int TimeOutInterval = 512; 
+	// => resolution of this implementation: 16 microseconds <- System.nanoSecs() with lower 14 bits cut off
+	// => 3200 IT-steps increment PTC in ~50 ms (OK for PrincOps: between cTickMin = 15 and cTickMax = 60 as required)
+	public static final int MicrosecondsPerPulse = 16;
+	public static final int TimeOutInterval = 3200; 
 	private static long lastITpulse = 0;
 	private static int currIT = 0;
 	private static int extIToffset = 0;
 	private static int internalIT() {
-		long newITpulse = System.nanoTime() & 0xFFFFFFFFFFFF0000L;
+		long newITpulse = System.nanoTime() & 0xFFFFFFFFFFFFC000L;
 		if (newITpulse != lastITpulse) {
 			lastITpulse = newITpulse;
-			currIT = (int)((newITpulse >>> 16) & 0x00000000FFFFFFFFL);
+			currIT = (int)((newITpulse >>> 14) & 0x00000000FFFFFFFFL);
 		}
 		return currIT;
 	}
+	
 	public static int IT() {
 		return internalIT() + extIToffset;
 	}

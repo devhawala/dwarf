@@ -26,6 +26,8 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.dmachine.dwarf;
 
+import java.util.function.Supplier;
+
 import dev.hawala.dmachine.engine.PrincOpsDefs;
 import dev.hawala.dmachine.engine.eLevelVKey;
 import dev.hawala.dmachine.engine.iMesaMachineDataAccessor;
@@ -103,9 +105,10 @@ public class TestUiDataConsumer implements iUiDataConsumer, Runnable {
 	}
 
 	@Override
-	public void registerUiDataRefresher(iMesaMachineDataAccessor refresher) {
+	public Supplier<int[]> registerUiDataRefresher(iMesaMachineDataAccessor refresher) {
 		synchronized(this) {
 			this.displayRefresher = refresher;
+			return null;
 		}
 	}
 	
@@ -233,8 +236,6 @@ public class TestUiDataConsumer implements iUiDataConsumer, Runnable {
 		int mouseCursorIndex = 0;
 		int currentMP = 0;
 		
-		int[] colorTable = { 0x00000000 , 0x00FFFFFF };
-		
 		boolean firstRefresh = true;
 		
 		while(true) {
@@ -259,8 +260,7 @@ public class TestUiDataConsumer implements iUiDataConsumer, Runnable {
 							displayMemStart,
 							this.displayMem.length - displayMemStart,
 							this.memFlags,
-							this.firstDisplayPage,
-							colorTable);
+							this.firstDisplayPage);
 					
 					if (newMP != currentMP) {
 						currentMP = newMP;

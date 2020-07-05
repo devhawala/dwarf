@@ -28,19 +28,20 @@ package dev.hawala.dmachine.dwarf;
 
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
+import java.util.function.BooleanSupplier;
 
 import javax.swing.JOptionPane;
 
-import dev.hawala.dmachine.Dwarf;
+import dev.hawala.dmachine.Duchess;
 import dev.hawala.dmachine.engine.Processes;
 
 /**
- * State listener for the Dwarf main window.
+ * State listener for the Mesa-Emulator main window.
  * <p>
  * The main purpose is to handle closing the main window while
  * the mesa engine is running: a confirmation dialog is showed and
  * if closing is confirmed, the mesa engine is halted gracefully
- * by shutting down the agents, which saves buffered data of
+ * by shutting down the devices, which saves buffered data of
  * the harddisk resp. the currently loaded floppy disk.
  * </p>
  * <p>
@@ -54,16 +55,22 @@ public class WindowStateListener implements WindowListener {
 	
 	private final MainUI mainWindow;
 	private final UiRefresher uiRefresher;
+	private final BooleanSupplier runningIndicator;
+	private final Runnable windowCloser;
 	
 	/**
 	 * Constructor.
 	 * 
 	 * @param mainWindow the main window of the Dwarf application
-	 * @param uiRefresher the ui refresher handling the Java ui updates 
+	 * @param uiRefresher the ui refresher handling the Java ui updates
+	 * @param runningIndicator function indicating if the emulator engine is currently running
+	 * @param windowCloser function for allowing to close the main window when the engine finally stops
 	 */
-	public WindowStateListener(MainUI mainWindow, UiRefresher uiRefresher) {
+	public WindowStateListener(MainUI mainWindow, UiRefresher uiRefresher, BooleanSupplier runningIndicator, Runnable windowCloser) {
 		this.mainWindow = mainWindow;
 		this.uiRefresher = uiRefresher;
+		this.runningIndicator = runningIndicator;
+		this.windowCloser = windowCloser;
 	}
 
 	@Override
@@ -72,7 +79,7 @@ public class WindowStateListener implements WindowListener {
 	@Override
 	public void windowClosing(WindowEvent e) {
 		// check if the mesa engine is running and handle accordingly
-		if (!Dwarf.isMesaEngineRunning()) {
+		if (!this.runningIndicator.getAsBoolean()) {
 			// simply terminate the program
 			System.exit(0);
 		}
@@ -86,7 +93,7 @@ public class WindowStateListener implements WindowListener {
 		if (result == JOptionPane.YES_OPTION) {
 			// halt the engine, let Agent states be saved and let the program be stopped
 			Processes.requestMesaEngineStop(); // this stops the engine and lets the mesa engine thread shut down the agents
-			Dwarf.terminateOnEngineStopped(); // this closes the main window when the mesa engine thread is done
+			this.windowCloser.run(); // this closes the main window when the mesa engine thread is done
 		}
 	}
 

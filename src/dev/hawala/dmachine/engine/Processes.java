@@ -62,7 +62,48 @@ import dev.hawala.dmachine.engine.agents.Agents;
  * 
  * @author Dr. Hans-Walter Latz / Berlin (2017)
  */
-public class Processes {	
+public class Processes {
+	
+	/*
+	 * handler for synchronizing (external/device) changes to mesa memory
+	 */
+	
+	@FunctionalInterface
+	public interface MesaMemoryUpdater {
+		void update();
+	}
+	
+	private static MesaMemoryUpdater mesaMemoryUpdater = null;
+	
+	public static synchronized void setMesaMemoryUpdater(MesaMemoryUpdater updater) {
+		mesaMemoryUpdater = updater;
+	}
+	
+	/*
+	 * statistics provider for providing counter data to the ui
+	 */
+	
+	public interface StatisticsProvider {
+		int getDiskReads();
+		int getDiskWrites();
+		int getFloppyReads();
+		int getFloppyWrites();
+		int getNetworkpacketsSent();
+		int getNetworkpacketsReceived();
+	}
+	
+	private static StatisticsProvider statisticsProvider = new StatisticsProvider() {
+		public int getDiskReads() { return 0; }
+		public int getDiskWrites() { return 0; }
+		public int getFloppyReads() { return 0; }
+		public int getFloppyWrites() { return 0; }
+		public int getNetworkpacketsSent() { return 0; }
+		public int getNetworkpacketsReceived() { return 0; }
+	};
+	
+	public static void setStatisticsProvider(StatisticsProvider p) {
+		statisticsProvider = p;
+	}
 	
 	/*
 	 * 10.1 Data Structures
@@ -750,8 +791,8 @@ public class Processes {
 		}
 		
 		// ensure that the mesa memory has all ingone external data if requested
-		if ((pendingWakeups & DATA_REFRESH_INTERRUPT) != 0) {
-			Agents.processPendingMesaMemoryUpdates();
+		if ((pendingWakeups & DATA_REFRESH_INTERRUPT) != 0 && mesaMemoryUpdater != null) {
+			mesaMemoryUpdater.update();
 		}
 		
 		// atomically get the wake-up bits possibly added during import of external data
@@ -848,7 +889,9 @@ public class Processes {
 		// Dwarf implementation specific part: refresh UI at (more or less) regular intervals
 		
 		// ensure that the mesa memory has all ingone external data
-		Agents.processPendingMesaMemoryUpdates();
+		if (mesaMemoryUpdater != null) {
+			mesaMemoryUpdater.update();
+		}
 		
 		// cyclically refresh the ui
 		long now = System.currentTimeMillis();
@@ -870,12 +913,12 @@ public class Processes {
 				if (--statisticsThrottle <= 0) {
 					refresher.acceptStatistics(
 							Cpu.insns,
-							Agents.getDiskReads(),
-							Agents.getDiskWrites(),
-							Agents.getFloppyReads(),
-							Agents.getFloppyWrites(),
-							Agents.getNetworkpacketsReceived(),
-							Agents.getNetworkpacketsSent());
+							statisticsProvider.getDiskReads(),
+							statisticsProvider.getDiskWrites(),
+							statisticsProvider.getFloppyReads(),
+							statisticsProvider.getFloppyWrites(),
+							statisticsProvider.getNetworkpacketsReceived(),
+							statisticsProvider.getNetworkpacketsSent());
 					statisticsThrottle = STATS_REFRESH_INTERVAL;
 				}
 				
@@ -897,8 +940,7 @@ public class Processes {
 					Mem.getDisplayRealPage() * PrincOpsDefs.WORDS_PER_PAGE, 
 					Mem.getDisplayPageSize() * PrincOpsDefs.WORDS_PER_PAGE,
 					vPageFlags,
-					Mem.displayFirstMappedVirtualPage,
-					Agents.getDisplayColorTable()
+					Mem.displayFirstMappedVirtualPage
 					);
 				Mem.resetDisplayPagesFlags();
 			}

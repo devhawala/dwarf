@@ -62,18 +62,74 @@ public class InitialMesaMicrocode {
 	public static final int sGermSwitchesOffset = 14; // offset in words of the boot switches to the germs entry system table data
 	
 	/**
-	 * Load a germ file from the filesystem into the memory of the mesa engine. 
+	 * Load a sequence of pages as germ into the memory of the mesa engine. 
 	 * 
-	 * @param filename the filename of the germ file
+	 * @param pages sequence of 256 word pages containing the germ
+	 * @param firstPageIsGFT is this a Post-4.0 PrincOps germ, i.e. is there a
+	 *     global-frame-table in the first page?
 	 * @return {@code true} if the file loaded is a plausible germ file;
 	 *   the {@code false} value indicates that the file was too small or
 	 *   too large, however the file has been loaded up to the maximal allowed
 	 *   germ size into memory. 
 	 * @throws IOException in case of access or plausibility problems with the germ file
 	 */
-	public static boolean loadGerm(String filename) throws IOException {
+	public static boolean loadGerm(List<short[]> pages, boolean firstPageIsGFT) {
 		boolean plausible = true;
+		boolean savedDoLog = Mem.doLog;
+		int currPageNo = 0;
+		
+		Mem.doLog = false;
+		
+		int germPages = pages.size();
+		if (germPages > Germ_maxPages) {
+			Cpu.logWarning("loadGerm: inplausible page count for germ, using only first " + Germ_maxPages + " pages");
+			plausible = false;
+			germPages = Germ_maxPages;
+		}
+		
+		// load the first source page to the special location if it is the GFT (Global Frame Table, MDS-relieved Pilot)
+		if (firstPageIsGFT) {
+			copyPage(pages.get(currPageNo++), Germ_page0);
+			germPages--;
+		}
+		
+		// load the rest of the germ into the germs MDS
+		int targetPage = Germ_page1;
+		while(germPages-- > 0) {
+			copyPage(pages.get(currPageNo++), targetPage++);
+		}
+		
+		Mem.doLog = savedDoLog;
+		return plausible;
+	}
+	
+	private static void copyPage(short[] pageContent, int targetPage) {
+		short mapFlags = Mem.getVPageFlags(targetPage);
+		int ptr = targetPage * PrincOpsDefs.WORDS_PER_PAGE;
+		for(int i = 0; i < PrincOpsDefs.WORDS_PER_PAGE; i++) {
+			Mem.writeWord(ptr++, pageContent[i]);
+		}
+		Mem.setVPageFlags(targetPage,  mapFlags);
+	}
+	
+	/**
+	 * Load a germ file from the filesystem into the memory of the mesa engine. 
+	 * 
+	 * @param filename the filename of the germ file
+	 * @param firstPageIsGFT is this a Post-4.0 PrincOps germ, i.e. is there a
+	 *     global-frame-table in the first page?
+	 * @return {@code true} if the file loaded is a plausible germ file;
+	 *   the {@code false} value indicates that the file was too small or
+	 *   too large, however the file has been loaded up to the maximal allowed
+	 *   germ size into memory. 
+	 * @throws IOException in case of access or plausibility problems with the germ file
+	 */
+	public static boolean loadGerm(String filename, boolean firstPageIsGFT) throws IOException {
+		boolean plausible = true;
+		boolean savedDoLog = Mem.doLog;
 		try (FileInputStream fis = new FileInputStream(filename)) {
+			Mem.doLog = false;
+			
 			int germSize = fis.available();
 			if (germSize < PrincOpsDefs.BYTES_PER_PAGE) {
 				throw new IOException("File '" + filename + "' too small for being a germ file");
@@ -90,15 +146,19 @@ public class InitialMesaMicrocode {
 				germPages = Germ_maxPages;
 			}
 			
-			// load the first source page to the special location
-			loadGermPage(fis, Germ_page0);
-			germPages--;
+			// load the first source page to the special location if it is the GFT (Global Frame Table, MDS-relieved Pilot)
+			if (firstPageIsGFT) {
+				loadGermPage(fis, Germ_page0);
+				germPages--;
+			}
 			
 			// load the rest of the germ into the germs MDS
 			int targetPage = Germ_page1;
 			while(germPages-- > 0) {
 				loadGermPage(fis, targetPage++);
 			}
+		} finally {
+			Mem.doLog = savedDoLog;
 		}
 		return plausible;
 	}
@@ -288,8 +348,12 @@ public class InitialMesaMicrocode {
 		putRequestWord(request_w_location_deviceType, DeviceType_anyFloppy);
 		putRequestWord(request_w_location_deviceOrdinal, deviceOrdinal);
 	}
+
+	public static final long BFN_Daybreak_Germ          = 0_25200004037L;
+	public static final long BFN_Daybreak_SimpleNetExec = 0_25200004040L;
+	public static final long BFN_Daybreak_Installer     = 0_25200004047L;
 	
-	public static void setBootRequestEthernet(short deviceOrdinal) {
+	public static void setBootRequestEthernet(short deviceOrdinal, long bfn) {
 		clearRequest();
 		
 		putRequestWord(request_w_action, Action_inLoad);
@@ -297,9 +361,9 @@ public class InitialMesaMicrocode {
 		putRequestWord(request_w_location_deviceOrdinal, deviceOrdinal);
 		
 		// boot file number to load (some magic number)
-		putRequestWord(request_w_location_ether_bfn1, (short)0x0000);
-		putRequestWord(request_w_location_ether_bfn2, (short)0xAA00);
-		putRequestWord(request_w_location_ether_bfn3, (short)0x0E60);
+		putRequestWord(request_w_location_ether_bfn1, (short)((bfn >> 32) & 0xFFFF));
+		putRequestWord(request_w_location_ether_bfn2, (short)((bfn >> 16) & 0xFFFF));
+		putRequestWord(request_w_location_ether_bfn3, (short)(bfn & 0xFFFF));
 		
 		// source: unknown/default network, broadcast address, boot socket
 		putRequestWord(request_w_location_ether_networkNumber1, (short)0x0000); // unknown/default network 

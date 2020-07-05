@@ -30,7 +30,7 @@ package dev.hawala.dmachine.engine;
  * Configuration constants (with one exception) controlling the logging
  * and debugging behavior of the mesa engine,
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2017)
+ * @author Dr. Hans-Walter Latz / Berlin (2017/2020)
  */
 public class Config {
 	
@@ -58,6 +58,11 @@ public class Config {
 	public static final boolean FLIGHTRECORDER_WITH_STACK = false;
 	
 	/**
+	 * log memory access locations and operations?
+	 */
+	public static final boolean LOG_MEM_ACCESS = false;
+	
+	/**
 	 * use interactive utility for debugging opcode execution?
 	 */
 	public static final boolean USE_DEBUG_INTERPRETER = false;
@@ -79,19 +84,29 @@ public class Config {
 	
 	
 	/*
-	 * logging in agents
+	 * logging in io processors (agents / iop-handlers)
 	 */
 	
-	public static final boolean AGENTS_LOG_DISPLAY = false;
+	public static final boolean IO_LOG_DISPLAY = false;
 	
-	public static final boolean AGENTS_LOG_MOUSE = false;
+	public static final boolean IO_LOG_MOUSE = false;
 	
-	public static final boolean AGENTS_LOG_KEYBOARD = false;
+	public static final boolean IO_LOG_KEYBOARD = false;
 	
-	public static final boolean AGENTS_LOG_DISK = false;
+	public static final boolean IO_LOG_DISK = false;
 	
-	public static final boolean AGENTS_LOG_FLOPPY = false;
+	public static final boolean IO_LOG_FLOPPY = false;
 	
-	public static final boolean AGENTS_LOG_NETWORK = false;
+	public static final boolean IO_LOG_NETWORK = false;
+	
+	public static final boolean IO_LOG_PROCESSOR = false;
+	
+	public static final boolean IO_LOG_TTY = false;
+	
+	/*
+	 * IORegion logging (6085/daybreak only)
+	 */
+	
+	public static final boolean IOR_LOG_MEM_ACCESS = false;
 
 }

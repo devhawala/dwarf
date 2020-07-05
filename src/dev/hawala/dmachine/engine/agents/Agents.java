@@ -28,13 +28,16 @@ package dev.hawala.dmachine.engine.agents;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.function.Supplier;
 
 import dev.hawala.dmachine.engine.Cpu;
 import dev.hawala.dmachine.engine.Mem;
+import dev.hawala.dmachine.engine.Opcodes;
 import dev.hawala.dmachine.engine.Processes;
 import dev.hawala.dmachine.engine.eLevelVKey;
 import dev.hawala.dmachine.engine.iMesaMachineDataAccessor;
 import dev.hawala.dmachine.engine.iUiDataConsumer;
+import dev.hawala.dmachine.engine.Opcodes.OpImpl;
 
 /**
  * Management class for all agents as central dispatch instance
@@ -109,8 +112,9 @@ public class Agents {
 		}
 		
 		@Override
-		public void registerUiDataRefresher(iMesaMachineDataAccessor refresher) {
+		public Supplier<int[]> registerUiDataRefresher(iMesaMachineDataAccessor refresher) {
 			Processes.registerUiRefreshCallback(refresher);
+			return () -> displayAgent.getColorTable();
 		}
 	}
 	
@@ -138,6 +142,11 @@ public class Agents {
 	 * Initialize the agents and setup the FCB area of the mesa engine.
 	 */
 	public static void initialize() {
+
+		// install Guam specific instructions
+		Opcodes.implantEscOverride(0x89, "zESC.CALLAGENT",  escCALLAGENT);
+		Opcodes.implantEscOverride(0x8A, "zESC.MAPDISPLAY", escMAPDISPLAY);
+		
 		// relevant (virtual) addresses in ioRegion:
 		// -> first COUNT[AgentDevice] LONG POINTERs to the FCB of each agent
 		// -> then the  FCB areas of the devices
@@ -274,6 +283,12 @@ public class Agents {
 			}
 		}
 		
+		// register memory updater for transferring data between agent and mesa memory
+		Processes.setMesaMemoryUpdater(Agents::processPendingMesaMemoryUpdates);
+		
+		// register statistics provider
+		Processes.setStatisticsProvider(new AgentStatisticsProvider());
+		
 		// reset the FCB pointer for agents not present in Dwarf
 		idx = AgentDevice.nullAgent.getIndex();
 		agent[idx] = null;
@@ -303,14 +318,36 @@ public class Agents {
 		if ((ptr & 1) != 0) { return ptr + 1; }
 		return ptr;
 	}
+
+	/*
+	 * Agent specific instructions
+	 */
 	
 	/**
-	 * Dispatch a CALLAGENT instruction to the correct agent. 
-	 * 
-	 * @param agentIndex the agent number popped from the
-	 * 	  evaluation stack
+	 * MAPDISPLAY - Map Display
 	 */
-	public static void callAgent(int agentIndex) {
+	private static final OpImpl escMAPDISPLAY = () -> {
+		int pageCountInEachBlock = Cpu.pop() & 0xFFFF;
+		int totalPageCount = Cpu.pop() & 0xFFFF;
+		int startingRealPage = Cpu.popLong();
+		int startingVirtualPage = Cpu.popLong();
+		
+		// sanity checks
+		if (startingRealPage != Mem.getDisplayRealPage()) { Cpu.ERROR("MAPDISPLAY :: startingRealPage != Mem.getDisplayRealPage()"); }
+		if (totalPageCount != Mem.getDisplayPageSize()) { Cpu.ERROR("MAPDISPLAY :: totalPageCount != Mem.getDisplayPageSize()"); }
+
+		// strange but this seems to be the right usage of the misleadingly named arguments (works both for 1-bit and 8-bit deep displays)...
+		int firstVirtualPage = startingVirtualPage + pageCountInEachBlock - totalPageCount;
+		
+		Mem.mapDisplayMemory(firstVirtualPage);
+	};
+	
+	/**
+	 * CALLAGENT - Call Device Agent
+	 */
+	private static final OpImpl escCALLAGENT = () -> {
+		int agentIndex = Cpu.pop();
+		
 		if (agentIndex < 0 || agentIndex >= agent.length) {
 			Cpu.ERROR("CALLAGENT :: invalid agentIndex " + agentIndex);
 			return; // we won't get here
@@ -320,12 +357,16 @@ public class Agents {
 			return; // we won't get here
 		}
 		agent[agentIndex].call();
-	}
+	};
+	
+	/*
+	 * support for external operations
+	 */
 	
 	/**
 	 * Transfer all cached data changes into mesa memory space.  
 	 */
-	public static void processPendingMesaMemoryUpdates() {
+	private static void processPendingMesaMemoryUpdates() {
 		for (int i = 0; i < AgentDevice.values().length; i++) {
 			if (agent[i] != null) {
 				agent[i].refreshMesaMemory();
@@ -351,34 +392,37 @@ public class Agents {
 	 * access to statistical data
 	 */
 	
-	public static int getDiskReads() {
-		if (diskAgent == null) { return 0; }
-		return diskAgent.getReads();
-	}
+	private static class AgentStatisticsProvider implements Processes.StatisticsProvider {
 	
-	public static int getDiskWrites() {
-		if (diskAgent == null) { return 0; }
-		return diskAgent.getWrites();
-	}
-	
-	public static int getFloppyReads() {
-		if (floppyAgent == null) { return 0; }
-		return floppyAgent.getReads();
-	}
-	
-	public static int getFloppyWrites() {
-		if (floppyAgent == null) { return 0; }
-		return floppyAgent.getWrites();
-	}
-	
-	public static int getNetworkpacketsSent() {
-		if (networkAgent == null) { return 0; }
-		return networkAgent.getPacketsSentCount();
-	}
-	
-	public static int getNetworkpacketsReceived() {
-		if (networkAgent == null) { return 0; }
-		return networkAgent.getPacketsReceivedCount();
+		public int getDiskReads() {
+			if (diskAgent == null) { return 0; }
+			return diskAgent.getReads();
+		}
+		
+		public int getDiskWrites() {
+			if (diskAgent == null) { return 0; }
+			return diskAgent.getWrites();
+		}
+		
+		public int getFloppyReads() {
+			if (floppyAgent == null) { return 0; }
+			return floppyAgent.getReads();
+		}
+		
+		public int getFloppyWrites() {
+			if (floppyAgent == null) { return 0; }
+			return floppyAgent.getWrites();
+		}
+		
+		public int getNetworkpacketsSent() {
+			if (networkAgent == null) { return 0; }
+			return networkAgent.getPacketsSentCount();
+		}
+		
+		public int getNetworkpacketsReceived() {
+			if (networkAgent == null) { return 0; }
+			return networkAgent.getPacketsReceivedCount();
+		}
 	}
 	
 	/*

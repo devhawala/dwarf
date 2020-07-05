@@ -1,68 +1,119 @@
-## Dwarf, an emulator for the Xerox Mesa Machine architecture.
+## Dwarf, a Mesa machine architecture emulator for Xerox 6085 and Guam workstations
 
-Dwarf is an emulator for the Xerox Mesa processor architecture. Dwarf is implemented
-in Java 8 and should therefore run on most systems where the Java 8 SE JRE and a decent
-window system is available.
+_Dwarf_ is an emulator for the Xerox Mesa processor architecture with 2 incarnations for
+emulating different machine generations marketed by Xerox in the 1980-ies and 1990-ies:
+- _Draco_ simulates a 6085 workstation (also called Dove or Daybreak) running the Mesa microcode
+- _Duchess_ rebuilds the Mesa machine in the GVWin product, which was itself a software
+   emulator running on a PC under MS Windows 3.x
+
+Dwarf is implemented in Java 8 and should therefore run on most systems where the Java 8
+and a decent window system is available.
 
 In the tradition of Xerox processor implementations having *D* as first letter (Dolphin, Dorado,
-Dicentra, Dandelion, Daybreak, Dove, Daisy, ...), this Java software implementation
-has been named *D*warf. 
+Dicentra, Dandelion, Daybreak, Dove, Daisy, ...), the Java software implementations of the
+Xerox machines have been named *D*warf, *D*raco and *D*uchess. 
 
 And yes, it is not the first open source software emulator for the Mesa architecture, this
 merit goes (to my knowledge) to Don Woodward for his [Dawn emulator](http://www.woodward.org/mps/)
 and Yasuhiro Hasegawa for his [Guam mesa-emulator](https://github.com/yokwe/mesa-emulator/tree/master/guam).  
 
-### Prerequisites
+### Quick start
 
-To run Dwarf, you will first need a Java 8 runtime installed for your operating system. Dwarf
-was developed on Linux and tested with Linux-Mint and MS-Windows 7.
+To run Dwarf, you will first need a Java 8 (or newer) runtime installed for your operating system. Dwarf
+was developed on Linux and tested with Linux-Mint, MS-Windows 7 and 10.
 
-Next you will need a bootable virtual disk having an Pilot 15.3 based Xerox operation system
-installed and a compatible germ file. This can be the XDE disk provided by Don Woodward on
-his site for his Dawn emulator or your GlobalView 2.1 disk.
+Next you will need the Dwarf software. It is available as ready to run release on Github:
+download the newest `dist.zip` package from the github repository, unzip the package,
+done (more or less).
 
-For XDE see the Don Woodwards [Dawn emulator](http://www.woodward.org/mps/) page: the page provides
+The archive `dist.zip` contains the directory `dwarf` having the runnable jar `dwarf.jar`
+and the default keyboard mapping file, as well as a set of sample configuration and shell script files
+for running some 6085 machine setups with Draco (ViewPoint 2.0 and XDE 5.0) and running XDE (Dawn)
+and GlobalView (GVWin) environments with Duchess.
+
+And finally you will need the disk images having the Xerox environment to run.
+
+For the Draco 6085 emulation, disk image files for ViewPoint 2.0 and XDE 5.0 are provided in
+the Github project in directory `disks-6085`. The [6085 disks readme](./disks-6085/readme.md)
+in this directory describes the environment installed on each disk and how to setup the
+environment with the sample configurations. 
+
+For the Duchess emulation you will need a bootable virtual disk having a Pilot 15.3 based
+Xerox operation system installed and a compatible germ file. This can be the XDE disk provided
+by Don Woodward on his site for his Dawn emulator or a GlobalView 2.1 disk:
+
+- for XDE see the Don Woodwards [Dawn emulator](http://www.woodward.org/mps/) page: the page provides
 links to the compressed `Dawn.dsk` file and to the source package for Dawn, where the `Dawn.germ`
 can be found in the directory `Source/Dawn/Resource`.
 
-For Globalview (the successor to ViewPoint as successor to Star), you're on your own, but your
-favorite internet search engine may be helpful...
+- for Globalview (the successor to ViewPoint as successor to Star), you can use the disk image file
+of your GlobalView 2.1 installation (usually `C:\GVWIN001.DSK`) along with the germ file
+(usually `C:\GVWIN\GVWIN.GRM`).    
+If no GlobalView disk is available, ready to run MS Windows 3.1 environments with GlobalView can be found
+at the [archive.org](https://archive.org/), e.g. [gvwin.zip](https://archive.org/details/gvwin) or
+[win3_globalview_21.zip](https://archive.org/details/win3_globalview_21).
+
+
+To set up such a Duchess system, copy the disk image file and the germ file into the corresponding
+directory of the sample environment and verify that the names match the expected ones in the
+configuration files (for XDE: `Dawn.dsk` resp. `Dawn.germ`, for GlobalView:  `GVWIN001.DSK`
+resp. `GVWIN.GRM`)
+
+Enough theory, here are screenshots of the emulator running some of the Xerox environments
+mentioned above.
+
+Duchess running GlobalView 2.1 in color mode (sample script `duchess-gvwin-color[.sh]`):
+
+![Duchess with GV2.1](duchess-gvwin-2.1.png)
+
+Draco running the XDE 5.0 with hacks disk (sample script `draco-xde5.0+hacks[.sh]`):
+
+![Draco with XDE 5.0](draco-xde5.0_2xTajo+hacks.png)
+
+Draco running the ViewPoint 2.0 disk (sample script `draco-vp2.0.5[.sh]`):
+
+![Draco with ViewPoint 2.0](draco-vp2.0.5.png)
 
 ### Working characteristics of Dwarf
 
-Besides a mesa processor, Dwarf supports the following peripherals found on a Xerox workstation
-like Dandelion (8000 system) or Dove (6085 system):
+Besides a mesa processor, Dwarf supports the following peripherals found on a Xerox workstation:
 
-- real memory in exponential increments between 256 kwords (512 KiB) and 8192 kwords (16 MiB)
+- real memory
+  - Draco: fixed to 2048 kwords (4 MiB)
+  - Duchess: configurable in exponential increments between 256 kwords (512 KiB) and 8192 kwords (16 MiB)
 
-- virtual memory in exponential increments from real memory size up to 32768 kwords (64 MiB)
+- virtual memory
+  - Draco: fixed to 16 Mwords (32 MiB)
+  - Duchess: configurable in exponential increments from real memory size up to 32768 kwords (64 MiB)
 
-- black&white or (8-bit) color bitmapped display, rendered in a Java Swing window
+- bitmapped display rendered in a Java Swing window
+  - Draco: small (832x633) or large (1152x861) 6085 black&white screen
+  - Duchess: configurable size as black&white or (8-bit) color display, 
 
-- keyboard
+- keyboard (with configurable mapping for Xerox specials keys)
 
-- 2- or 3-button mouse
+- 2 or 3 button mouse
 
-- one harddisk image
+- one harddisk image    
+  (specific file formats for Draco and Guam, as 6085 and Guam disks have different internal structures)
 
-- one floppy drive (1.44 MByte raw or legacy IMD/DMK floppies, changeable at runtime)
+- one floppy drive, image file changeable at runtime
+  - Draco: IMD/DMK floppy image format of 6085 (5.25") floppies (read/only)
+  - Duchess: 1.44 MByte raw (read/write) or legacy IMD/DMK floppy images (read/only)
 
 - network device, interfacing to a Dodo NetHub or as fallback to an internal time service
 
-Dwarf supports the following floppy formats:
-
-- IMD for legacy floppies if the file extension is `.imd` (case-insensitive)
-
-- DMK for legacy floppies if the file extension is `.dmk` (case-insensitive)
-
+Dwarf supports the following floppy image formats:
+- IMD for floppies if the file extension is `.imd` (case-insensitive)
+- DMK for floppies if the file extension is `.dmk` (case-insensitive)
 - raw format for 3.5" floppies as created by the original emulator on PCs
 
-The term "legacy floppy" means that the image was created from a floppy disk written by
+The term "legacy floppy" for Duchess means that the image was created from a floppy disk written by
 a 8010 (8" floppy) or a 6085 (5.25" floppy) workstation with a Pilot based OS like XDE (4.0
-or later) or ViewPoint (1.0 or later). Legacy floppy images are mounted in R/O mode, as
-changes cannot be written back into the original format (IMD or DMK).  
-The disk content of the legacy floppy image is implanted in a template 3.5" image
-based on the XDE sector layout. This allows to read the legacy floppy content.
+or later) or ViewPoint (1.0 or later). The disk content of the legacy floppy image is implanted
+in a template 3.5" image based on the XDE sector layout. This allows to read the legacy floppy content.
+Legacy floppy images are mounted in R/O mode, as changes cannot be written back into the original
+format (IMD or DMK).  
 
 When using or thinking of using Dwarf, some characteristics of the implementation should
 be kept in mind:
@@ -73,16 +124,17 @@ are written to a compressed delta file containing the differences to the origina
 stays unmodified. When the same system is next started, Dwarf first reads the original disk
 and applies the delta in memory.  
 This approach gives fast disk I/O, but possibly requires increasing the Java heap space for
-large disks (however the "usual" 30 MByte Pilot disk plus 16 MByte real memory can be used
+large disks (however a "normal" Pilot disk (under 80 MByte) plus 16 MByte real memory can be used
 with Java defaults)
 
 - similarly Dwarf loads a complete virtual floppy disk image file into memory
-for diskette operations. In case of a raw  (1.44 MByte) floppy image, when ejecting the floppy
+for diskette operations.    
+In case of a raw (1.44 MByte) floppy image mounted in Duchess, when ejecting the floppy
 or shutting down the machine, the complete floppy image file is overwritten if the floppy was modified
 (no delta file). Legacy IMD or DMK floppies are always mounted read-only and are not written
 back, as only reading IMD or DMK files is supported.
 
-- unlike Xerox machines, Dwarf is not a microcoded machine, so Dwarf can only execute the
+- unlike Xerox machines, Dwarf is not a microcoded machine, so Dwarf will only execute the
 Mesa instructions; running Lisp or Smalltalk or Cedar environments (would these be available)
 by loading a different microcode is not possible.
 
@@ -98,67 +150,40 @@ and germ files, a configuration file defining the characteristics of the machine
 
 #### Installing or building Dwarf
 
-Dwarf is available as ready to run release on Github: download the newest `dist.zip` package
-from the github repository, unzip the package, done (more or less).
-
-The archive `dist.zip` contains a runnable jar `dwarf.jar` and the default keyboard mapping
-file, as well as sample configuration and shell script files for running XDE (Dawn) and
-GlobalView (GVWin) environments.    
-Copy your disk and germ files for the environments into the corresponding directories and if
-necessary adapt the filenames in respective configuration file.
+Dwarf is available as ready to run release on Github (file `dist.zip` in the github repository).
+See the above section "Quick start" for the installation of the package.
 
 Hint: the disk or floppy files should not reside in the same directory as the `dwarf.jar` file,
-as the Java runtime will high probably enforce the read-only access to files in this directory.    
-The `dist.zip` archive contains a exemplary directory structure.
+as the Java runtime will high probably enforce the read-only access to files in this directory.
 
 For building from source, download the ZIP or clone the Dwarf Github repository, this gives you
-a project directory that can be imported into Eclipse (at least Mars release, preferably Neon).
-The main Java class for the _Run Configuration_ is: `dev.hawala.dmachine.Dwarf`  
+a project directory that can be imported into Eclipse (Neon release or newer).
+The main Java class for the _Run Configuration_ is: `dev.hawala.dmachine.DwarfMain`  
 
 #### Defining the configuration of a Dwarf machine
 
-A Dwarf machine is configured with a conventional Java properties file, so the name-value
+A Draco or Duchess machine is configured with a conventional Java properties file, so the name-value
 separator is the `=` character and comments are introduced by a `#`.
 
-The following configuration parameters define a Dwarf machine:
+Due to the specifics of the emulated hardware peripherals, Draco and Duchess have specific
+properties for their respective components, however sharing a set of common properties. The
+following sections first describe the common properties and then the specifics for Draco and
+Duchess. Looking at the comments in the sample configurations of the distribution package
+may also be helpful here.
+
+The following configuration parameters can or must be used for machines emulated with Draco
+and Duchess :
 
 - `boot`  
-the filename of the boot disk  
-_required_
-
-- `germ`  
-the filename of the germ file  
+the filename of the boot disk; this must specify a disk file in the correct format for the
+emulated system, i.e. a `.zdisk` file with a compressed 6085 disk image for Draco resp.
+an (uncompressed) `.dsk` file for Duchess; the emulator will automatically load the current delta file
+for that disk type    
 _required_
 
 - `switches`  
 the boot switches to use  
 _optional, default_: `8Wy{|}\346\347\350\377`
-
-- `addressBitsReal`  
-number of address bits for the real memory, this must be a value between 18 ad 23,
-giving between 256 kwords (512 kByte) and 8192 kwords (16 MByte)  
-_optional, default_: `22`
-
-- `addressBitsVirtual`  
-number of address bits for the virtual memory, this must be a value between `addressBitsReal`
-and 25, allowing up to 32768 kwords (64 MByte)  
-_optional, default_: `23`
-
-- `displayWidth`  
-the width of the mesa machine display in pixels, must be a multiple 16  
-_optional, default_: `1024`
-
-- `displayHeight`  
-the height of the mesa machine display in pixels  
-_optional, default_: `640`
-
-- `displayTypeColor`    
-boolean specifying the display mode for Dwarf: the value `false` specifies a monochrome
-display (default), while `true` specifies the display as 8-bit deep color display
-(with a color lookup table controlled by the OS running in the mesa machine);    
-setting this option to `true` is intended for running GVWin 2.1, although the Dawn/XDE disk
-also works with color mode (not showing any colors however)    
-_optional, default_: `false`
 
 - `keyboardMapFile`  
 the name of the keyboard mapping file to use; see the syntax description at the
@@ -182,16 +207,19 @@ _optional, default_: `true`
 the processor or machine id for the Dwarf machine (or MAC address in todays wording)  
 (if networking is used, it should be ensured that **all** machines on the network
 have an unique processor id, or Pilot-based machines will stop by entering 0915 state)    
+Attention: the processor id is crucial when running ViewPoint, as the "Software options"
+available in the ViewPoint installation are bound to this id, so running the same disk
+with a modified processor id will invalidate the available software    
 _optional, default_: `00-1D-BA-AE-04-C3`
 
 - `title`  
 the text to display in the title bar of Dwarfs window  
-_optional, default_: value of `boot` (the boot disk name)
+_optional, default_: value of the property `boot` (the boot disk name)
 
 - `oldDeltasToKeep`  
 the number of deltas to keep in addition to the current delta; when saving
 a new delta, Dwarf renames the now previous delta using the its save timestamp
-and deletes the older backups exceeding `oldDeltasToKeep`  
+and deletes the older backups count exceeding `oldDeltasToKeep`  
 _optional, default_: `5`
 
 - `initialFloppy`  
@@ -227,49 +255,136 @@ building up the Dwarf UI; by default, the Dwarf machine must be started
 manually with the _Start_ button in the toolbar.  
 _optional, default_: `false`
 
-Sample properties `dawn.properties` for running the Dawn disk:
+- `xdeNoBlinkWorkAround`    
+work-around for the blinking "Time not set! Create no files!" text in the HeraldWindow
+instead of the current date/time.    
+(this blinking text is used if the current time is not in a certain time frame starting
+with the build-time of the Tajo/CoPilot-bootfile)    
+The work-around is to fake the current time to a date in this time frame until the
+HeraldWindow has probably checked the time and then get back to the real time; the delay
+for the reverting to the real time is given as number of instructions, expressed in 100.000
+executed instructions.    
+The value is given as `<100thousand-instructions> : <iso-date>`    
+_optional, default_: (none)    
+the following values usually work:    
+`xdeNoBlinkWorkAround = 110 : 1987-06-01` for Tajo 12.3    
+`xdeNoBlinkWorkAround = 150 : 1987-06-01` for CoPilot 12.3    
+`xdeNoBlinkWorkAround = 150 : 1987-06-01` for Tajo 12.3 + Hacks    
+`xdeNoBlinkWorkAround = 81 : 1995-06-01 ` for Tajo 15.3 (Dawn)
+
+The following configuration parameters are specific for Draco (6085) machines:
+
+- `fallbackGerm`    
+germ file to use if the germ cannot be loaded from the 6085 disk image.    
+Draco tries to load the germ from the disk, but may fail in doing so (no germ
+on the disk or the germ is not stored in contiguous sectors): the germ file
+specified here will be used as fallback    
+_optional, default_: (none)
+
+- `largeScreen`    
+this boolean value defines the screen size for the emulated 6085 workstation,
+choosing between a large display (19" screen with 1152x861 pixels) or a small
+display (15" screen with 832x633 pixels)    
+_optional, default_: `true` (large screen)
+
+- `stopOnNetDebug`    
+this boolean value specifies if Draco will stop the machine when the system enters
+the "wait for network debugging" state (MP 0915) or if it will effectively wait
+for a debugger to connect    
+_optional, default_: `true`
+
+The following configuration parameters are specific for Duchess (Guam) machines:
+
+- `germ`  
+the filename of the germ file  
+_required_
+
+- `addressBitsReal`  
+number of address bits for the real memory, this must be a value between 18 ad 23,
+giving between 256 kwords (512 kByte) and 8192 kwords (16 MByte)  
+_optional, default_: `22`
+
+- `addressBitsVirtual`  
+number of address bits for the virtual memory, this must be a value between `addressBitsReal`
+and 25, allowing up to 32768 kwords (64 MByte)  
+_optional, default_: `23`
+
+- `displayWidth`  
+the width of the mesa machine display in pixels, must be a multiple 16  
+_optional, default_: `1024`
+
+- `displayHeight`  
+the height of the mesa machine display in pixels  
+_optional, default_: `640`
+
+- `displayTypeColor`    
+boolean specifying the display mode for Duchess: the value `false` specifies a monochrome
+display (default), while `true` specifies the display as 8-bit deep color display
+(with a color lookup table controlled by the OS running in the mesa machine);    
+setting this option to `true` is intended for running GVWin 2.1, although the Dawn/XDE disk
+also works with color mode (not showing any colors however)    
+_optional, default_: `false`
+
+
+The following sample properties `dawn.properties` defines the emulated machine
+for running the Dawn disk with Duchess:
 
 ```
 #
-# Dwarf configuration for Dawn's xde system
+# sample Duchess configuration for Don Woodward's Dawn xde system
 #
 
-title = XDE
+# title to display in the main window
+title = Dawn XDE
 
-boot = Dawn/Dawn001.dsk
-germ = Dawn/Dawn.germ
+# disk, germ and switches for booting
+boot = dawn_xde/Dawn.dsk
+germ = dawn_xde/Dawn.germ
 switches = 8Wy{|}\\346\\347\\350\\377
 
-processorId = 10-00-FF-12-34-56
+# boot the disk when Duchess starts
+autostart = true
 
+# machine-id (aka. MAC address) of the machine
+processorId = 10-00-FF-12-34-46
+
+# screen size of the machine
 displayWidth = 1024
 displayHeight = 640
 
+# virtual and real address sizes
 addressBitsVirtual = 23
 addressBitsReal = 22
 
+# definitions file for keyboard mapping
 keyboardMapFile = keyboard-maps/kbd_linux_de_DE.map
 
-floppyDirectory = Dawn/floppies
+# default location for floppy image files
+floppyDirectory = dawn_xde/floppies
 
 # network configuration, uncomment to use NetHub
-#netHubHost = localhost
-#netHubPort = 3333
+netHubHost = localhost
+netHubPort = 3333
 
 # internal time service as network fallback: time zone offset to GMT in minutes (negative => west, positive => east)
 # Germany with DST => +120 ; Alaska => -480 
-localTimeOffsetMinutes = 120
+## localTimeOffsetMinutes = 0
 
-autostart = true
+# work-around for blinking "Time not set! Create no files!" text in the HeraldWindow
+# (may need fine-tuning for the instruction number in 100.000 insns)
+xdeNoBlinkWorkAround = 81 : 1995-06-01
+
 ```
 
 #### Command line parameters for Dwarf
 
 Dwarf is packaged in a runnable jar file (`dwarf.jar`) and started with
 
-`java -jar dwarf.jar` _`parameters`_
+`java -jar dwarf.jar -draco|-duchess` _`parameters`_
 
-and the following parameters:
+The first command line parameter defines the machine type type to emulate.
+
+The following additional parameters are valid both for Draco and Duchess:
 
 - _configuration-properties-file_  
 the properties file for the Dwarf machine; if the filename given does
@@ -300,13 +415,25 @@ archived into a zip file (named after the disk file and the current timestamp) a
 delta files are deleted before doing the merge.  
 _optional_ (as alternative to running the mesa engine) 
 
+When running the Draco emulator, the following command line parameters allow to
+boot the system from the network instead of the disk specified in the configuration
+(booting form the network requires a well-configured boot service on the XNS network):
+
+- `-netinstall`    
+request the germ and the network installer from the boot service and run this installer
+in the configured machine
+
+- `-netexec`    
+request the germ and the network executive from the boot service and run this installer
+in the configured machine
+
 Examples:
 
-`java -jar dwarf.jar dawn -run`  
-(run the virtual xerox machine configured in the file `dawn.properties`)
+`java -jar dwarf.jar -duchess dawn -run`  
+(run the virtual xerox Guam machine configured in the file `dawn.properties`)
 
-`java -jar dwarf.jar dawn -merge`  
-(merge the delta into the disk file for virtual xerox machine configured in the file `dawn.properties`)
+`java -jar dwarf.jar -duchess dawn -merge`  
+(merge the delta into the disk file for virtual xerox Guam machine configured in the file `dawn.properties`)
 
 #### Running a Dwarf machine
 
@@ -327,7 +454,7 @@ and disabled if the mesa engine is already running. The buttons should be self-e
 and display a hint when the mouse stays a while over them.
 
 The _Insert_ button opens the file selection dialog for the floppy image file to load.
-Virtual floppy files must have have an extension `.imd` or `.dmk` for loading a legacy
+Virtual floppy files must have have an extension `.imd` or `.dmk` for loading a 6085 or 8010
 floppy image or any extension but a size of 1440 KiB = 1.474.560 bytes to be accepted in the
 file selection dialog for "inserting" the floppy. If the _R/O_ checkbox is checked, the
 floppy will be loaded in read-only mode, rejecting any attempts to modify the diskette.
@@ -341,21 +468,34 @@ The keyboard mapping can be freely defined through a mapping file, however provi
 sensible fallback (at least if you have a german keyboard) if no file is specified.
 
 The probably most interesting information is about the special Xerox command keys
-not available on modern PCs, which are mapped by default as follows:
+not available on modern PCs, which are mapped to keyboard keys by default resp. additionally by the sample
+mapping file `kbd_linux_de_DE.map` as follows:
 
-Xerox key|PC key(s)
----------|------
-Stop|ESC
-Open|Ctrl-O
-Props|Ctrl-P
-Copy|Ctrl-C
-Move|Ctrl-M
-Next|Ctrl-N
-Find|Ctrl-F
-Again|Ctrl-A
-Same|Ctrl-S
-Undo|Ctrl-U
-Help|Ctrl-H
+Xerox key|builtin default|kbd_linux_de_DE.map
+---------|---------------|-------------------
+Stop|ESC|ESC
+Open|Ctrl-O|Ctrl-O
+Props|Ctrl-P|Ctrl-P
+Copy|Ctrl-C|Ctrl-C
+Move|Ctrl-M|Ctrl-M
+Next|Ctrl-N|Ctrl-N
+Find|Ctrl-F|Ctrl-F
+Again|Ctrl-A|Ctrl-A
+Same|Ctrl-S|Ctrl-S
+Undo|Ctrl-U|Ctrl-U
+Help|Ctrl-H|Ctrl-H
+Center||F2
+Bold||F3
+Italic||F4
+Case||F5
+Strikeout||F6
+Underline||F7
+SuperSub||F8
+Smaller||F9
+Margins||F10
+Font||F11
+Special||Alt
+Expand||AltGr , Ctrl-Alt
 
 ##### Status line
 
@@ -370,65 +510,72 @@ The safe way to bring down the guest OS is to use the corresponding function of 
 "Boot button" in the "Boot from:" menu in XDE), as this ensures that the OS flushes all
 buffers (or at least should so) before executing one of the stopping instructions.
 When the mesa engine stops running, the state of the virtual harddisk and of the possibly
-loaded virtual floppy is saved to disk.
+loaded virtual floppy is saved to disk.    
+There are however exceptions with Draco:
+- ViewPoint does not have a "stop the machine" option (not in the menu and not as logout option).
+So for bringing down ViewPoint, log out, wait until the screen turns black with the bouncing keyboard
+and then simply halt the system with the "Stop"-button (which will save disk changes, see below).
+- for the `xde5.0.zdisk` (XDE 5.0 for 6085) using any of the XDE menus for shutting down the system
+will produce an unusable disk with Draco (see the [6085 disks readme](./disks-6085/readme.md)). A system
+running this disk must be shut down with "Stop"-button. 
 
-Clicking the "Stop" button or closing Dwarfs window while the mesa engine is running will
+Clicking the "Stop" button or closing the Dwarf window while the mesa engine is running will
 open a confirmation dialog: confirming will do a hard stop of mesa engine by leaving the
 instruction interpreter loop and then save the current state of the harddisk and floppy.
 However the OS has no chance to flush its buffers, so the current state of the harddisk
-is probably inconsistent and may require a scavenger run on next startup.
+is possibly inconsistent and may require a scavenger run on next startup.
 
 Stopping Dwarf externally using the host OS means (Ctrl-C in the shell running the Java program,
 `kill` command etc.) will of course prevent writing back the harddisk resp. floppy content,
 so changes will be lost.
 
-Warning: unlike other emulators, Dwarf does not overwrite the original virtual harddisk
-file, but saves changes in (compressed) delta files. This means that the delta must first
+#### Using the same Guam disk with different emulators
+
+Unlike other emulators for Guam, Duchess does not overwrite the original virtual harddisk
+file, but saves changes in compressed delta files. This means that the delta must first
 be included in the harddisk image file (using the `-merge` command line parameter)
-before the harddisk file is used with an other emulator.  
+before the harddisk file is used with an other emulator.
+
 Not merging the delta has the following effects:
 
-- when running an other emulator with the virtual harddisk, the changes made in Dwarf
-  boot sessions will not be visible, as Dwarf leaves the original file unchanged
+- when running an other emulator with the virtual harddisk, the changes made in Duchess
+  boot sessions will not be visible, as Duchess leaves the original file unchanged
   
 - saving changes to the virtual harddisk file from the other emulator will make the
-  delta files saved by Dwarf useless, as the base for the delta changed and will
+  delta files saved by Duchess useless, as the base for the delta changed and will
   high probably result in a corrupt disk when booting the new base disk file with the delta.  
   However removing the delta and starting with only the new base disk should work (if
   the other emulator was closed regularly) and the changes in the disk will be
-  visible in Dwarf's session.
+  visible in the Duchess session.
 
 ### Known limitations
 
-- running Dwarf has currently a "boot once" approach, meaning there is no way to reset or restart
-  the guest OS once it was booted: to restart the OS, the Dwarf program must be stopped and
-  started again
+- running Draco and Duchess has currently a "boot once" approach, meaning there is no way to reset
+  or restart the guest OS once it was booted: to restart the OS, the Dwarf program must be stopped
+  and started again
   
 - furthermore other non-vital devices are missing, having only rudimentary agent implementations
-  (stream, tty, serial and parallel ports).
+  (tty, serial and parallel ports).
 
-- using (explicitly or implicitly) functionality requiring the StreamAgent to communicate
-  with the "external" world (local file access, local printing, copy&paste, ...) will probably
-  leave the system in an unusable state (hourglass mouse pointer with fast running cpu), as
-  Dwarfs agent probably gives the wrong answer for "not available". 
-
-- although Dwarfs mesa processor implementation supports both the "old" global frame architecture
-(all global frames are in the Main Data Space) and the "new" architecture ("MDS-relieved": global
-frames can reside outside the MDS), only the "new" variant has ever been tested, as no bootable
-disk for an "old" OS version is known to be available, besides the fact that interfacing the vital
-devices (disk, keyboard etc.) is undocumented and no sample open-source implementation is available for
-analysis.  
-Therefore no option to choose the "old" global frame architecture is available.   
- 
+- (Duchess-specific) using (explicitly or implicitly) functionality requiring the StreamAgent to
+  communicate with the "external" world (local file access, local printing, copy&paste, ...) will
+  probably leave the system in an unusable state (hourglass mouse pointer with fast running cpu), as
+  the Duchess agent probably gives the wrong answer for "not available".  
 
 ### Known Bugs
 
-(currently no known bugs; a stability problem in BYTBLT(R) instructions has been fixed, as well as
-the misinterpretation of the princops regarding handling the bit-addresses in BITBLT/COLORBLT
-instructions when direction is 'reverse', along with smaller flaws preventing the correct rendering
-of the help icon in GlobalView)
+- Draco rigid disk controller: incomplete resp. buggy implementation becoming apparent for disk operations of
+XDE 5.0 CoPilot when doing world-swaps, resulting in MP 0921 (boot loader device error) resp. unusable
+disks after shutdown (MP 0915 on re-boot)   
+This does however not affect the normal disk operations, as ViewPoint and the XDE 5.0 with 2x Tajo
+(seem to) work normally with the same implementation.
 
 ### Development history
+
+- 2020-07-05    
+introduced the Draco 6085 emulation as second machine type for the Dwarf Mesa machine kernel    
+given the name "Duchess" to the Guam emulation (now being the first machine type based on the Dwarf Mesa machine kernel)    
+provided Draco disk image files for ViewPoint 2.0 and XDE 5.0 
 
 - 2020-05-25, 2020-06-07    
 added color display support, allowing to run GVWin 2.1 in 8-bit color mode
@@ -480,6 +627,8 @@ The following documents available in the internet were useful for creating Dwarf
 - [PrincOps Corrections](http://www.woodward.org/PrincOps/01xPrincOpsCorrections.html)
 
 - [6085 FE Training](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/6085/service/6085_FE_training.pdf)
+
+- various documents at [Bitsavers, xerox/6085](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/6085/) about the 6085 machine
 
 ### Acknowledgments/Credits
 

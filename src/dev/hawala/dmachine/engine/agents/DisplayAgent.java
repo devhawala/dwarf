@@ -124,7 +124,7 @@ public class DisplayAgent extends Agent {
 			throw new IllegalArgumentException("Unsupported 'displayType' = " + displayType);
 		}
 		
-		this.enableLogging(Config.AGENTS_LOG_DISPLAY);
+		this.enableLogging(Config.IO_LOG_DISPLAY);
 	}
 	
 	public int[] getColorTable() {

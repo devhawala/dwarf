@@ -144,7 +144,7 @@ public class DiskAgent extends Agent {
 		
 		// local logging function
 		private void logf(String template, Object... args) {
-			if (Config.AGENTS_LOG_DISK) {
+			if (Config.IO_LOG_DISK) {
 				System.out.printf("DiskFile[" + f.getName() + "]: " + template, args);
 			}
 		}
@@ -675,7 +675,7 @@ public class DiskAgent extends Agent {
 		
 		// create DiskFile and append to files
 		try {
-			if (Config.AGENTS_LOG_DISK) {
+			if (Config.IO_LOG_DISK) {
 				Cpu.logInfo("DiskAgent.addFile :: adding file '" + filePath + "'");
 			}
 			DiskFile diskfile = new DiskFile(f, readonly, deltasToKeep);
@@ -786,7 +786,7 @@ public class DiskAgent extends Agent {
 	 */
 	public DiskAgent(int fcbAddress) {
 		super(AgentDevice.diskAgent, fcbAddress, FCB_with_DCB_SIZE);
-		this.enableLogging(Config.AGENTS_LOG_DISK);
+		this.enableLogging(Config.IO_LOG_DISK);
 	}
 	
 	@Override

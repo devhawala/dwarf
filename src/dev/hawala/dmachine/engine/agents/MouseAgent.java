@@ -97,7 +97,7 @@ public class MouseAgent extends Agent {
 	public MouseAgent(int fcbAddress) {
 		super(AgentDevice.mouseAgent, fcbAddress, FCB_SIZE);
 		
-		this.enableLogging(Config.AGENTS_LOG_MOUSE);
+		this.enableLogging(Config.IO_LOG_MOUSE);
 		
 		this.uiCurrX = this.mesaCurrX + this.mouseHotspotX;
 		this.uiCurrY = this.mesaCurrY + this.mouseHotspotY;

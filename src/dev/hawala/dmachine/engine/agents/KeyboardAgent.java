@@ -59,7 +59,7 @@ public class KeyboardAgent extends Agent {
 	public KeyboardAgent(int fcbAddress) {
 		super(AgentDevice.keyboardAgent, fcbAddress, FCB_SIZE);
 		
-		this.enableLogging(Config.AGENTS_LOG_KEYBOARD);
+		this.enableLogging(Config.IO_LOG_KEYBOARD);
 		
 		for (int i = 0; i < FCB_SIZE; i++) {
 			this.uiKeys[i] = ALL_KEYS_UP;

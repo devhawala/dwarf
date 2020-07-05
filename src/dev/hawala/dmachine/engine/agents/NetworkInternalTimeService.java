@@ -41,6 +41,19 @@ public class NetworkInternalTimeService implements iNetDeviceInterface {
 	private final short offsetHours;
 	private final short offsetMinutes;
 	
+	private static long timeShiftMilliSeconds = 0;
+	
+	/**
+	 * Set the time adjustment ("days back in time") offset to be used
+	 * when the "current" time is retrieved by the mesa machine programs.
+	 * 
+	 * @param seconds adjustment offset in seconds (negative values for shifting
+	 *     the current time to the past.
+	 */
+	public static void setTimeShiftSeconds(long seconds) {
+		timeShiftMilliSeconds = seconds * 1000;
+	}
+	
 	/**
 	 * Initialize the internal time service with the time zone information
 	 * (without DST, meaning if DST is active, the {@code gmtOffsetMinutes}
@@ -111,7 +124,7 @@ public class NetworkInternalTimeService implements iNetDeviceInterface {
 		short mac2 = this.readWord(srcBuffer, 5);
 		
 		// time data
-		long unixTimeMillis = System.currentTimeMillis();
+		long unixTimeMillis = System.currentTimeMillis() + timeShiftMilliSeconds;
 		int  milliSecs = (int)(unixTimeMillis % 1000);
 		long unixTimeSecs = unixTimeMillis / 1000;
 		int mesaSecs = (int)((unixTimeSecs + (731 * 86400) + 2114294400) & 0x00000000FFFFFFFFL);

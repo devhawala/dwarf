@@ -28,8 +28,9 @@ package dev.hawala.dmachine.dwarf;
 
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.util.function.Supplier;
 
-import dev.hawala.dmachine.Dwarf;
+import dev.hawala.dmachine.Duchess;
 import dev.hawala.dmachine.engine.iMesaMachineDataAccessor;
 import dev.hawala.dmachine.engine.iUiDataConsumer;
 import dev.hawala.dmachine.engine.iUiDataConsumer.PointerBitmapAcceptor;
@@ -90,20 +91,35 @@ public class UiRefresher implements ActionListener, iMesaMachineDataAccessor, Po
 	private String statusMpPart = " 0000 ";
 	private String statusStatsPart = "no statistics available yet";
 	
+	// string format for the stats part of the status line, depending on the sreeen size 
+	private final String statusLineFormat;
+	
+	// color tables
+	private int[] defaultColorTable = { 0x00FFFFFF, 0x00000000 };
+	private final Supplier<int[]> colorTableSupplier;
+	
 	/**
 	 * constructor.
 	 * 
 	 * @param window the main window of the Dwarf application
 	 * @param consumer the data consumer object provided by the mesa engine
 	 */
-	public UiRefresher(MainUI window, iUiDataConsumer consumer) {
+	public UiRefresher(MainUI window, iUiDataConsumer consumer, boolean compactStatusLine) {
 		// set finals
 		this.mainWindow = window;
 		this.mesaEngine = consumer;
 		
 		// register with the mesa engine
 		this.mesaEngine.registerPointerBitmapAcceptor(this);
-		this.mesaEngine.registerUiDataRefresher(this);
+		Supplier<int[]> cltSupplier = this.mesaEngine.registerUiDataRefresher(this);
+		this.colorTableSupplier = (cltSupplier != null)
+				? cltSupplier
+				: () -> defaultColorTable ;
+		
+		// choose the status line format
+		this.statusLineFormat = compactStatusLine
+				? "| %5d | %s | dsk [ r: %6d w: %6d ] | flp [ r: %4d w: %4d ] | net [ r: %5d s: %5d ]"
+				: "| up: %5d | insns: %s | disk [ rd: %6d wr: %6d ] | floppy [ rd: %4d wr: %4d ] | network [ rcv: %5d snd: %5d ]";
 	}
 	
 	/**
@@ -120,15 +136,21 @@ public class UiRefresher implements ActionListener, iMesaMachineDataAccessor, Po
 		}
 	}
 	
+	/**
+	 * Start the millisecond counter for the uptime in the status line.
+	 */
+	public void engineStarted() {
+		synchronized(this) {
+			if (startMillis == 0) {
+				startMillis = System.currentTimeMillis();
+			}
+		}
+	}
+	
 	// callback method regularly invoked from the Java UI thread through a Swing timer
 	@Override
 	public void actionPerformed(ActionEvent arg) {		
 		synchronized(this) {
-			// check if the mesa engine started in the meantime
-			if (startMillis == 0 && Dwarf.isMesaEngineRunning()) {
-				startMillis = System.currentTimeMillis();
-			}
-			
 			// repaint the screen if necessary
 			if (this.doRepaint && this.doRefreshUi) {
 				this.mainWindow.getDisplayPane().repaint();
@@ -166,13 +188,13 @@ public class UiRefresher implements ActionListener, iMesaMachineDataAccessor, Po
 
 	// invoked by the mesa engine when it is opportune to transfer the display memory content to Java space
 	@Override
-	public void accessRealMemory(short[] realMemory, int memOffset, int memWords, short[] pageFlags, int firstPage, int[] colorTable) {
+	public void accessRealMemory(short[] realMemory, int memOffset, int memWords, short[] pageFlags, int firstPage) {
 		synchronized(this) {
 			if (!this.doRefreshUi) { return; }
 			this.doRepaint = this.mainWindow.getDisplayPane().copyDisplayContent(
 					realMemory,	memOffset, memWords,
 					pageFlags,	firstPage,
-					colorTable);
+					this.colorTableSupplier.get());
 		}
 	}
 
@@ -214,7 +236,7 @@ public class UiRefresher implements ActionListener, iMesaMachineDataAccessor, Po
 			long upSeconds = (System.currentTimeMillis() - this.startMillis) / 1000;
 			
 			this.statusStatsPart = String.format(
-					"| up: %5d | insns: %s | disk [ rd: %6d wr: %6d ] | floppy [ rd: %4d wr: %4d ] | network [ rcv: %5d snd: %5d ]",
+					statusLineFormat,
 					upSeconds,
 					cntString,
 					counterDiskReads,
@@ -225,8 +247,7 @@ public class UiRefresher implements ActionListener, iMesaMachineDataAccessor, Po
 					counterNetworkPacketsSent
 					);
 			
-			this.newStatusLine = this.statusMpPart + this.statusStatsPart;
-			
+			this.newStatusLine = this.statusMpPart + this.statusStatsPart;			
 		}
 	}
 

@@ -26,6 +26,8 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.dmachine.engine;
 
+import java.util.function.Supplier;
+
 /**
  * Callbacks provided by the (device-) Agents of the mesa engine to the UI
  * for asynchronously receiving UI events or initiating display updates.
@@ -103,7 +105,9 @@ public interface iUiDataConsumer {
 	 * The callback is registered once at initialization time of the UI.
 	 * 
 	 * @param refresher the set of callbacks to the UI to used by the mesa engine,
+	 * @return callback returning the current color table. may be {@code null} for B/W display;
+	 *      the {@code int}-values returned by the callback kust be {@code 0x00rrggbb}
 	 */
-	void registerUiDataRefresher(iMesaMachineDataAccessor refresher);
+	Supplier<int[]> registerUiDataRefresher(iMesaMachineDataAccessor refresher);
 	
 }

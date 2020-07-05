@@ -77,23 +77,24 @@ public class MainUI {
 	/**
 	 * Create the application.
 	 * 
+	 * @param emulatorName the name of the emulator running in the UI
 	 * @param title the title text for the window
 	 * @param displayWidth the pixel width of the mesa display
 	 * @param displayHeight the pixel height of the mesa display
 	 * @param resizable should the top level window be resizable?
 	 * @param colorDisplay is this a color (8-bit color lookup table) display machine?
 	 */
-	public MainUI(String title, int displayWidth, int displayHeight, boolean resizable, boolean colorDisplay) {
+	public MainUI(String emulatorName, String title, int displayWidth, int displayHeight, boolean resizable, boolean colorDisplay) {
 		this.title = title;
 		this.displayWidth = displayWidth;
 		this.displayHeight = displayHeight;
-		initialize(resizable, colorDisplay);
+		initialize(emulatorName, resizable, colorDisplay);
 	}
 
 	// Initialize the contents of the frame.
-	private void initialize(boolean resizable, boolean colorDisplay) {
+	private void initialize(String emulatorName, boolean resizable, boolean colorDisplay) {
 		this.frmDwarfMesaEngine = new JFrame();
-		this.frmDwarfMesaEngine.setTitle("Dwarf Mesa Engine - " + this.title);
+		this.frmDwarfMesaEngine.setTitle(emulatorName + " Mesa Engine - " + this.title);
 		this.frmDwarfMesaEngine.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		this.frmDwarfMesaEngine.getContentPane().setLayout(new BorderLayout(2, 2));
 		
@@ -264,7 +265,7 @@ public class MainUI {
 			public void run() {
 				try {
 					if (!allowMainStartup) { return; }
-					MainUI window = new MainUI("this is a test", 1024, 640, true, false);
+				MainUI window = new MainUI("Test", "this is a test", 1024, 640, true, false);
 					window.frmDwarfMesaEngine.setVisible(true);
 				} catch (Exception e) {
 					e.printStackTrace();

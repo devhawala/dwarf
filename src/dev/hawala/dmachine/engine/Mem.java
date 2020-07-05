@@ -27,8 +27,12 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package dev.hawala.dmachine.engine;
 
 import java.security.InvalidParameterException;
+import java.util.List;
 
 import dev.hawala.dmachine.engine.PilotDefs.DisplayType;
+import dev.hawala.dmachine.engine.iop6085.IORegion;
+import dev.hawala.dmachine.engine.iop6085.IORegion.Field;
+import dev.hawala.dmachine.engine.iop6085.IORegion.IORAddress;
 
 /**
  * Implementation of the mesa engine real and virtual memory including
@@ -37,18 +41,9 @@ import dev.hawala.dmachine.engine.PilotDefs.DisplayType;
  * @author Dr. Hans-Walter Latz / Berlin (2017)
  */
 public class Mem {
-	
-	// reserve the half of the first bank for IO devices 
-	public static final int IOAREA_PAGECOUNT = PrincOpsDefs.PAGES_PER_SEGMENT / 2;
-	
-	// first virtual page of the ioArea
-	public static final int IOAREA_START_VPAGE = PrincOpsDefs.PAGES_PER_SEGMENT - IOAREA_PAGECOUNT;
-	
-	// virtual address of the ioArea-start (LONG POINTER) 
-	public static final int ioArea = IOAREA_START_VPAGE * PrincOpsDefs.WORDS_PER_PAGE;
 
 	// the real memory
-	private static short[] mem = null;
+	protected static short[] mem = null;
 	
 	// virtual memory part 1: map virtual-page => real-page-base address
 	private static int[] pageMap = null; // != PrincOps: this hold the real page base address (to speed up things), not the real page no
@@ -68,20 +63,30 @@ public class Mem {
 	
 	// display memory characteristics
 	private static int effectivePixelsPerLine; // pixels on a scan line in memory
-	private static int displayPixelWidth;      // pixels on a scan line displayed
-	private static int displayPixelHeight;     // number of vertical scan lines
-	private static int displayPageSize;        // total number of pages for the display memory
+	public static int displayPixelWidth;      // pixels on a scan line displayed
+	public static int displayPixelHeight;     // number of vertical scan lines
+	public static int displayFirstRealPage;
+	public static int displayPageSize;        // total number of pages for the display memory
 	static int displayFirstMappedVirtualPage;  // (package-level to allow class Processes to access it)
 	
 	/*
-	 * memory setup at machine start
+	 * Machine-Type GUAM: memory and virtual-memory-map setup at machine start
 	 */
 	
-	public static void initializeMemory(int addrBitsVirtual, int addrBitsReal) {
-		initializeMemory(addrBitsVirtual, addrBitsReal, PilotDefs.DisplayType.monochrome, 960, 720);
+	// reserve the half of the first bank for IO devices 
+	private static final int IOAREA_PAGECOUNT = PrincOpsDefs.PAGES_PER_SEGMENT / 2;
+	
+	// first virtual page of the ioArea
+	private static final int IOAREA_START_VPAGE = PrincOpsDefs.PAGES_PER_SEGMENT - IOAREA_PAGECOUNT;
+	
+	// virtual address of the ioArea-start (LONG POINTER) 
+	public static final int ioArea = IOAREA_START_VPAGE * PrincOpsDefs.WORDS_PER_PAGE;
+	
+	public static void initializeMemoryGuam(int addrBitsVirtual, int addrBitsReal) {
+		initializeMemoryGuam(addrBitsVirtual, addrBitsReal, PilotDefs.DisplayType.monochrome, 960, 720);
 	}
 	
-	public static void initializeMemory(
+	public static void initializeMemoryGuam(
 			int addrBitsVirtual,
 			int addrBitsReal,
 			PilotDefs.DisplayType displayType,
@@ -137,17 +142,18 @@ public class Mem {
 		lastVirtualAddress = (PrincOpsDefs.WORDS_PER_PAGE * virtualPageCount) - 1;
 		lastVirtualPage = virtualPageCount - 1;
 		lastRealPage = realPageCount - 1;
+		displayFirstRealPage = lastRealPage + 1;
 		
 		// initialize virtual and display memory
-		createInitialPageMapping();
+		createInitialPageMappingGuam();
 		if (activeDisplayType == PilotDefs.DisplayType.monochrome) {
-			initializeDisplayMemory();
+			initializeDisplayMemoryGuam();
 		} else {
-			initializeColorDisplayMemory();
+			initializeColorDisplayMemoryGuam();
 		}
 	}
 	
-	public static void createInitialPageMapping() {
+	public static void createInitialPageMappingGuam() {
 		/*
 		 * for some reasons not documented in PrincOps, the IO area in the first (virtual) segment
 		 * has to be mapped starting at real page/address 0 
@@ -205,7 +211,7 @@ public class Mem {
 	
 	// put some pattern into display memory indicating that the display has still
 	// not been initialized by the OS being booted (i.e. Pilot resp. its client XDE or ViewPoint/GlobalView)
-	private static void initializeDisplayMemory() {
+	private static void initializeDisplayMemoryGuam() {
 		int displayWord = mem.length - (displayPageSize * PrincOpsDefs.WORDS_PER_PAGE);
 		int wordsPerLine = displayPixelWidth / PrincOpsDefs.WORD_BITS;
 		short[] template = {
@@ -236,7 +242,7 @@ public class Mem {
 		}
 	}
 	
-	private static void initializeColorDisplayMemory() {
+	private static void initializeColorDisplayMemoryGuam() {
 		int[] template = {
 			0x0100 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0001 ,
 			0x0001 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0000 , 0x0100 ,
@@ -265,6 +271,172 @@ public class Mem {
 			tl += 8;
 			if (tl >= template.length) { tl = 0; }
 		}
+	}
+	
+	/*
+	 * Machine type Daybreak (Dove 6085): memory and virtual-memory-map setup at machine start
+	 */
+	
+	public static void initializeMemoryDaybreak(boolean largeScreen) {
+		
+		// fixed real and virtual sizes for this 6085 implementation
+		addressBitsReal = 21;    // 13 bits for page address + 8 bits for word in page address == 8192 pages == 2 MWords == 4 MBytes
+		addressBitsVirtual = 24; // 16 MWords == 32 MBytes == 65536 pages == 256 VMM pages (1 word per VM-page: 13 bit page address + 3 status-bits)
+		
+		// screen data
+		if (largeScreen) {
+			// "18 quadwords x 861 lines"
+			displayPixelWidth = 1152; // not 1184 (1184 = 18.5 quadwords)
+			displayPixelHeight = 861; // not 925
+			dBreak_displayType = 5;
+		} else  {
+			// "13 quadwords x 633 lines"
+			displayPixelWidth = 832;  // not 880
+			displayPixelHeight = 633; // not 697
+			dBreak_displayType = 1;
+		}
+		displayPageSize = 256; // largescreen: 18 * 4 * 861 / 256 => 242.15625 pages
+		activeDisplayType = PilotDefs.DisplayType.monochrome;
+		
+		// allocate real memory and virtual memory map
+		int realPageCount = 1 << (addressBitsReal - PrincOpsDefs.ADDRESSBITS_IN_PAGE);
+		int virtualPageCount = 1 << (addressBitsVirtual - PrincOpsDefs.ADDRESSBITS_IN_PAGE);
+		
+		mem = new short[ realPageCount * PrincOpsDefs.WORDS_PER_PAGE ];
+		pageMap = new int[virtualPageCount];
+		pageFlags = new short[virtualPageCount];
+		lastVirtualAddress = (PrincOpsDefs.WORDS_PER_PAGE * virtualPageCount) - 1;
+		lastVirtualPage = virtualPageCount - 1;
+		lastRealPage = realPageCount - 1;
+		
+		// initialize virtual and display memory
+		createInitialPageMappingDBreak();
+		initializeDisplayMemoryDBreak();
+	}
+	
+	public static final int IORegion_Real_StartPage = 32; // skip the first 8 KWord = 16 KByte (why-ever)
+	public static final int IORegion_PageCount = 64; // = 16 KWord = 32 KByte (? sufficient space?)
+	
+	public static final int IORegion_Virtual_PageAfterEnd = 256;
+	public static final int IORegion_Virtual_StartPage = IORegion_Virtual_PageAfterEnd - IORegion_PageCount; // IORegion must be placed at the end of the first VM bank
+	
+	public static final int IORegion_VM_StartAddress = IORegion_Virtual_StartPage * PrincOpsDefs.WORDS_PER_PAGE;
+	public static final int IORegion_VM_EndAddressPlusOne = IORegion_Virtual_PageAfterEnd * PrincOpsDefs.WORDS_PER_PAGE;
+	
+	public static final int DBreak_Real_VMM_PageCount = 256;
+	public static final int DBreak_Real_DisplayMem_PageCount = 256;
+	
+	public static int dBreak_firstRealPageInVMM;
+	public static int dBreak_lastRealPageInVMM;
+	public static int dBreak_countRealPagesInVMM;
+	
+	public static int dBreak_Real_firstMapPage;
+	public static int dBreak_Real_countMapPages;
+	
+	public static int dBreak_Real_firstDisplayBankPage;
+	public static int dBreak_Real_countDisplayBankPages;
+	public static int dBreak_displayType;
+	
+	private static void createInitialPageMappingDBreak() {
+		
+		/* real memory (total 8192 pages):
+		 *   - 32 pages unused: why??
+		 *   - 64 pages IORegion
+		 *   - 7584 pages for virtual memory
+		 *   - 256 pages VM map
+		 *   - 256 pages display memory
+		 */
+		
+		/* (initial) virtual memory mapping
+		 *   - 192 pages  => real[96 .. 256)     == free
+		 *   - 64 pages   => real[32 .. 96)      == IORegion
+		 *   - 7424 pages => real[256 .. 7680)   == free 
+		 *   - rest       => unmapped
+		 */
+		
+		int realPagesTotal = lastRealPage + 1;
+		
+		dBreak_firstRealPageInVMM = IORegion_Real_StartPage;
+		dBreak_lastRealPageInVMM = realPagesTotal - DBreak_Real_VMM_PageCount - DBreak_Real_DisplayMem_PageCount - 1;
+		dBreak_countRealPagesInVMM = dBreak_lastRealPageInVMM - dBreak_firstRealPageInVMM + 1;
+		
+		dBreak_Real_firstDisplayBankPage = realPagesTotal - DBreak_Real_DisplayMem_PageCount;
+		dBreak_Real_countDisplayBankPages = DBreak_Real_DisplayMem_PageCount;
+		
+		dBreak_Real_firstMapPage = dBreak_Real_firstDisplayBankPage - DBreak_Real_VMM_PageCount;
+		dBreak_Real_countMapPages = DBreak_Real_VMM_PageCount;
+		
+		int currVirtualPage = 0;
+		
+		// map real pages after the IORegion up to the VM start of the IORegion
+		int currRealAddress = (IORegion_Real_StartPage + IORegion_PageCount) * PrincOpsDefs.WORDS_PER_PAGE;
+		while(currVirtualPage < IORegion_Virtual_StartPage) {
+			pageMap[currVirtualPage] = currRealAddress;
+			pageFlags[currVirtualPage] = PrincOpsDefs.MAPFLAGS_CLEAR;
+			currVirtualPage++;
+			currRealAddress += PrincOpsDefs.WORDS_PER_PAGE;
+		}
+		int behindIORegionContinueRealAddress = currRealAddress;
+		
+		// map IORegion into the expected VM location (=> first VM bank is the mapped)
+		currRealAddress = IORegion_Real_StartPage * PrincOpsDefs.WORDS_PER_PAGE;
+		for (int i = 0; i < IORegion_PageCount; i++) {
+			pageMap[currVirtualPage] = currRealAddress;
+			pageFlags[currVirtualPage] = PrincOpsDefs.MAPFLAGS_CLEAR;
+			currVirtualPage++;
+			currRealAddress += PrincOpsDefs.WORDS_PER_PAGE;
+		}
+		
+		// map remaining real pages up to the start of reserved real memory into VM
+		currRealAddress = behindIORegionContinueRealAddress;
+		int realAddressLimit = dBreak_lastRealPageInVMM * PrincOpsDefs.WORDS_PER_PAGE; 
+		while(currRealAddress <= realAddressLimit) {
+			pageMap[currVirtualPage] = currRealAddress;
+			pageFlags[currVirtualPage] = PrincOpsDefs.MAPFLAGS_CLEAR;
+			currVirtualPage++;
+			currRealAddress += PrincOpsDefs.WORDS_PER_PAGE;
+		}
+		
+		// define the remaining pages in VM as unmapped
+		while(currVirtualPage <= lastVirtualPage) {
+			pageMap[currVirtualPage] = 0;
+			pageFlags[currVirtualPage] = PrincOpsDefs.MAPFLAGS_VACANT;
+			currVirtualPage++;
+		} 
+	}
+	
+	private static void initializeDisplayMemoryDBreak() {
+		int displayWord = dBreak_Real_firstDisplayBankPage * PrincOpsDefs.WORDS_PER_PAGE;
+		int wordsPerLine = displayPixelWidth / PrincOpsDefs.WORD_BITS;
+		short[] template = {
+			(short)0b1111000000001111,
+			(short)0b0000110000110000,
+			(short)0b0000001111000000,
+			(short)0b0000110000110000,
+			(short)0b0001000000001000,
+			(short)0b0001000000001000,
+			(short)0b0000100000010000,
+			(short)0b0000010000100000,
+			(short)0b0000001001000000,
+			(short)0b0000000110000000,
+			(short)0b0000001001000000,
+			(short)0b0000010000100000,
+			(short)0b0000100000010000,
+			(short)0b0001000000001000,
+			(short)0b0010000000000100,
+			(short)0b0100000000000010
+		};
+		int ti = 0;
+		for (int i = 0; i < displayPixelHeight; i++) {
+			for (int j = 0; j < wordsPerLine; j++) {
+				mem[displayWord++] = template[ti];
+			}
+			ti++;
+			if (ti >= template.length) { ti = 0; }
+		}
+		
+		displayFirstRealPage = dBreak_Real_firstDisplayBankPage;
+		displayPageSize = ((wordsPerLine * displayPixelHeight) + PrincOpsDefs.WORDS_PER_PAGE - 1) / PrincOpsDefs.WORDS_PER_PAGE;
 	}
 	
 	/*
@@ -371,6 +543,55 @@ public class Mem {
 		return !isProtected(flags);
 	}
 	
+	public static void dumpPreStartGerm(boolean isPrincOpsPost40, int pageCount) {
+		System.out.printf("\npre-start germmemory dump: isPrincOpsPost40 = %s , pageCount = %d\n", isPrincOpsPost40, pageCount);
+		
+		if (isPrincOpsPost40) {
+			dumpVPage(0x200, " - 1st GFT page");
+		}
+		
+		for (int i = 0; i < pageCount; i++) {
+			dumpVPage(i, "");
+		}
+		
+		dumpVmMap(0, 1280);
+	}
+	
+	private static void dumpVPage(int pageNo, String comment) {
+		System.out.printf("\npage 0x%04X = %d%s", pageNo, pageNo, comment);
+		int lp = pageNo << 8;
+		for (int i = 0; i < 256; i++) {
+			if ((i % 16) == 0) {
+				System.out.printf("\n  0x%02X :", i);
+			}
+			System.out.printf(" %04X", rawRead(lp++));
+		}
+		System.out.println();
+	}
+	
+	// for devices/agents debugging
+	public static void dumpVmMap(int firstPage, int pageCount) {
+		int limit = firstPage + pageCount;
+		for (int page = firstPage; page < limit; page++) {
+			if (page < 0 || page > pageMap.length) {
+				System.out.printf("page 0x%06X -> out of VM\n", page);
+			} else {
+				int flags = pageFlags[page] & PrincOpsDefs.MAPFLAGS_MASK;
+				if (flags == PrincOpsDefs.MAPFLAGS_VACANT) {
+					System.out.printf("page 0x%06X -> vacant\n", page);
+				} else {
+					System.out.printf("page 0x%06X -> real 0x%06X %s%s%s\n",
+							page, 
+							pageMap[page],
+							(flags & PrincOpsDefs.MAPFLAGS_PROTECTED) != 0 ? "R/O" : "r/w",
+							(flags & PrincOpsDefs.MAPFLAGS_REFERENCED) != 0? " ref'ed" : "",
+							(flags & PrincOpsDefs.MAPFLAGS_DIRTY) != 0 ? " dirty" : ""
+							);
+				}
+			}
+		}
+	}
+	
 	/*
 	 * memory access support
 	 */
@@ -433,6 +654,16 @@ public class Mem {
 	}
 	
 	/*
+	 * memory access logging
+	 */
+	
+	public static boolean doLog = true;
+	
+	private static void memLogf(String format, Object... args) {
+		if (Config.LOG_MEM_ACCESS && doLog) { Cpu.logf(format, args); }
+	}
+	
+	/*
 	 * LONG POINTER access (with caching)
 	 */
 	
@@ -444,7 +675,41 @@ public class Mem {
 		if (vPage != _lastLpVpageRead) {
 			_lastLpRpageRead = getRealAddress(vPage, false);
 			_lastLpVpageRead = vPage;
-		} 
+		}
+		
+		if (Config.IOR_LOG_MEM_ACCESS) {
+			int realAddr = _lastLpRpageRead | (ptr & 0x000000FF);
+			final IORAddress iorAddr;
+			final String prefix;
+			if (ptr < IORegion_VM_EndAddressPlusOne && ptr >= IORegion_VM_StartAddress) {
+				iorAddr = IORegion.resolveRealAddress(realAddr);
+				prefix = "read IORegion";
+			} else if (_lastLpRpageRead < 0xFFFF) {
+				iorAddr = IORegion.resolveLastKnownStructure(realAddr);
+				prefix = "+++ read IOStruct";
+			} else {
+				iorAddr = null;
+				prefix = null;
+			}
+			if (iorAddr != null && iorAddr.getName().startsWith("Floppy")) {
+				System.out.printf(
+						"%s: [ virtual: 0x%06X , real: 0x%06X ] -> 0x%04X - %s\n",
+						prefix, ptr, realAddr, mem[realAddr], iorAddr.getName()
+						);
+				List<Field> fields = iorAddr.getFields();
+				if (fields != null) {
+					for (Field f : fields) {
+						f.dump("  ");
+					}
+				}
+				if (realAddr == 0x002024) {
+					System.out.printf(
+							"++\n++ access to IOP FCB-table entry for TTY (real = 0x002024) at 0x%08X+0x%04X [ insn# %d ]\n++\n ",
+							Cpu.CB, Cpu.savedPC, Cpu.insns);
+				}
+			}
+		}
+		
 		return mem[_lastLpRpageRead | (ptr & 0x000000FF)];
 	}
 	
@@ -456,27 +721,69 @@ public class Mem {
 		if (vPage != _lastLpVpageWritten) {
 			_lastLpRpageWritten = getRealAddress(vPage, true);
 			_lastLpVpageWritten = vPage;
-		} 
+		}
 		mem[_lastLpRpageWritten | (ptr & 0x000000FF)] = value;
+		
+		if (Config.IOR_LOG_MEM_ACCESS) {
+			int realAddr = _lastLpRpageWritten | (ptr & 0x000000FF);
+			final IORAddress iorAddr;
+			final String prefix;
+			if (ptr < IORegion_VM_EndAddressPlusOne && ptr >= IORegion_VM_StartAddress) {
+				iorAddr = IORegion.resolveRealAddress(realAddr);
+				prefix = "write IORegion";
+			} else if (_lastLpRpageWritten < 0xFFFF) {
+				iorAddr = IORegion.resolveLastKnownStructure(realAddr);
+				prefix = "+++++ write IOStruct";
+			} else {
+				iorAddr = null;
+				prefix = null;
+			}
+			if (iorAddr != null && iorAddr.getName().startsWith("Floppy")) {
+				System.out.printf(
+						"%s: [ virtual: 0x%06X , real: 0x%06X ] <- 0x%04X - %s\n",
+						prefix, ptr, realAddr, value, iorAddr.getName()
+						);
+				List<Field> fields = iorAddr.getFields();
+				if (fields != null) {
+					for (Field f : fields) {
+						f.dump("  ");
+					}
+				}
+			}
+		}
 	}
 	
 	public static short readWord(int longPointer) {
-		return _readLpWord(longPointer);
+		short w = _readLpWord(longPointer);
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. readWord( lp = 0x%08X )  -> 0x%04X\n", longPointer, w & 0xFFFF);
+		}
+		return w;
 	}
 	
 	public static void writeWord(int longPointer, short word) {
 		_writeLpWord(longPointer, word);
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. writeWord( lp = 0x%08X , 0x%04X )\n", longPointer, word & 0xFFFF);
+		}
 	}
 	
 	public static int readDblWord(int longPointer) {
 		short low = _readLpWord(longPointer);
 		short high = _readLpWord(longPointer + 1);
-		return (high << 16) | (low & 0x0000FFFF);
+		int dbl = (high << 16) | (low & 0x0000FFFF);
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. readDblWord( lp = 0x%08X )  -> 0x%08X\n", longPointer, dbl);
+		}
+		return dbl;
 	}
 	
 	public static void writeDblWord(int longPointer, int dblword) {
 		_writeLpWord(longPointer, (short)(dblword & 0xFFFF));
 		_writeLpWord(longPointer + 1, (short)(dblword >>> 16));
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. writeDblWord( lp = 0x%08X , 0x%08X )\n", longPointer, dblword);
+		}
 	}
 	
 	/*
@@ -491,7 +798,36 @@ public class Mem {
 		if (vPage != _lastMdsVpageRead) {
 			_lastMdsRpageRead = getRealAddress(vPage, false);
 			_lastMdsVpageRead = vPage;
-		} 
+		}
+		
+		if (Config.IOR_LOG_MEM_ACCESS) {
+			int realAddr = _lastMdsRpageRead | (ptr & 0x000000FF);
+			final IORAddress iorAddr;
+			final String prefix;
+			if (ptr < IORegion_VM_EndAddressPlusOne && ptr >= IORegion_VM_StartAddress) {
+				iorAddr = IORegion.resolveRealAddress(realAddr);
+				prefix = "MDS-read IORegion";
+			} else if (_lastMdsRpageRead <= 0xFFFF) {
+				iorAddr = IORegion.resolveLastKnownStructure(realAddr);
+				prefix = "+++ MDS-read IOStruct";
+			} else {
+				iorAddr = null;
+				prefix = null;
+			}
+			if (iorAddr != null) {
+				System.out.printf(
+						"%s: [ virtual: 0x%06X , real: 0x%06X ] -> 0x%04X - %s\n",
+						prefix, ptr, realAddr, mem[realAddr], iorAddr.getName()
+						);
+				List<Field> fields = iorAddr.getFields();
+				if (fields != null) {
+					for (Field f : fields) {
+						f.dump("  ");
+					}
+				}
+			}
+		}
+		
 		return mem[_lastMdsRpageRead | (ptr & 0x000000FF)];
 	}
 	
@@ -505,56 +841,118 @@ public class Mem {
 			_lastMdsVpageWritten = vPage;
 		} 
 		mem[_lastMdsRpageWritten | (ptr & 0x000000FF)] = value;
+		
+		if (Config.IOR_LOG_MEM_ACCESS) {
+			int realAddr = _lastMdsRpageWritten | (ptr & 0x000000FF);
+			final IORAddress iorAddr;
+			final String prefix;
+			if (ptr < IORegion_VM_EndAddressPlusOne && ptr >= IORegion_VM_StartAddress) {
+				iorAddr = IORegion.resolveRealAddress(realAddr);
+				prefix = "MDS-write IORegion";
+			} else if (_lastMdsRpageWritten < 0xFFFF) {
+				iorAddr = IORegion.resolveLastKnownStructure(realAddr);
+				prefix = "+++++ MDS-write IOStruct";
+			} else {
+				iorAddr = null;
+				prefix = null;
+			}
+			if (iorAddr != null) {
+				System.out.printf(
+						"%s: [ virtual: 0x%06X , real: 0x%06X ] <- 0x%04X - %s\n",
+						prefix, ptr, realAddr, value, iorAddr.getName()
+						);
+				List<Field> fields = iorAddr.getFields();
+				if (fields != null) {
+					for (Field f : fields) {
+						f.dump("  ");
+					}
+				}
+			}
+		}
 	}
 	
 	public static short readMDSWord(int pointer) {
-		return _readLengthenedMDSWord(Cpu.lengthenPointer(pointer));
+		short w = _readLengthenedMDSWord(Cpu.lengthenPointer(pointer));
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. readMDSWord( p = 0x%04X )  -> 0x%04X\n", pointer, w & 0xFFFF);
+		}
+		return w;
 	}
 	
 	public static short readMDSWord(int pointer, int offset) {
-		return _readLengthenedMDSWord(Cpu.lengthenPointer(pointer + offset));
+		short w = _readLengthenedMDSWord(Cpu.lengthenPointer(pointer + offset));
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. readMDSWord( p = 0x%04X [0x%04X+0x%04X] )  -> 0x%04X\n", pointer+offset, pointer, offset, w & 0xFFFF);
+		}
+		return w;
 	}
 	
 	public static void writeMDSWord(int pointer, short value) {
 		_writeLengthenedMDSWord(Cpu.lengthenPointer(pointer), value);
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. writeMDSWord( p = 0x%04X , 0x%04X )\n", pointer, value & 0xFFFF);
+		}
 	}
 	
 	public static void writeMDSWord(int pointer, int offset, short value) {
 		_writeLengthenedMDSWord(Cpu.lengthenPointer(pointer + offset), value);
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. writeMDSWord( p = 0x%04X [0x%04X+0x%04X] , 0x%04X )\n", pointer+offset, pointer, offset, value & 0xFFFF);
+		}
 	}
 	
 	public static void writeMDSWord(int pointer, int value) {
 		_writeLengthenedMDSWord(Cpu.lengthenPointer(pointer), (short)(value & 0xFFFF));
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. writeMDSWord( p = 0x%04X , 0x%04X )\n", pointer, value & 0xFFFF);
+		}
 	}
 	
 	public static void writeMDSWord(int pointer, int offset, int value) {
 		_writeLengthenedMDSWord(Cpu.lengthenPointer(pointer + offset), (short)(value & 0xFFFF));
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. writeMDSWord( p = 0x%04X [0x%04X+0x%04X] , 0x%04X )\n", pointer+offset, pointer, offset, value & 0xFFFF);
+		}
 	}
 	
 	public static int readMDSDblWord(int pointer) {
 		int ptr = Cpu.lengthenPointer(pointer);
 		short low = _readLengthenedMDSWord(ptr);
 		short high = _readLengthenedMDSWord(ptr + 1);
-		return (high << 16) | (low & 0x0000FFFF);
+		int dbl = (high << 16) | (low & 0x0000FFFF);
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. readMDSDblWord( p = 0x%04X )  -> 0x%08X\n", pointer, dbl);
+		}
+		return dbl;
 	}
 	
 	public static int readMDSDblWord(int pointer, int offset) {
 		int ptr = Cpu.lengthenPointer(pointer + offset);
 		short low = _readLengthenedMDSWord(ptr);
 		short high = _readLengthenedMDSWord(ptr + 1);
-		return (high << 16) | (low & 0x0000FFFF);
+		int dbl = (high << 16) | (low & 0x0000FFFF);
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. readMDSDblWord( p = 0x%04X [0x%04X+0x%04X] )  -> 0x%08X\n", pointer+offset, pointer, offset, dbl);
+		}
+		return dbl;
 	}
 	
 	public static void writeMDSDblWord(int pointer, int value) {
 		int ptr = Cpu.lengthenPointer(pointer);
 		_writeLengthenedMDSWord(ptr, (short)(value & 0xFFFF));
 		_writeLengthenedMDSWord(ptr + 1, (short)(value >>> 16));
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. writeMDSDblWord( p = 0x%04X , 0x%08X )\n", pointer, value);
+		}
 	}
 	
 	public static void writeMDSDblWord(int pointer, int offset, int value) {
 		int ptr = Cpu.lengthenPointer(pointer + offset);
 		_writeLengthenedMDSWord(ptr, (short)(value & 0xFFFF));
 		_writeLengthenedMDSWord(ptr + 1, (short)(value >>> 16));
+		if (Config.LOG_MEM_ACCESS) {
+			memLogf(".. writeMDSDblWord( p = 0x%04X [0x%04X+0x%04X] , 0x%08X )\n", pointer+offset, pointer, offset, value);
+		}
 	}	
 	
 	/*
@@ -765,7 +1163,7 @@ public class Mem {
 	}
 	
 	public static int getDisplayRealPage() {
-		return lastRealPage + 1; // display real memory starts after the last  
+		return displayFirstRealPage;  
 	}
 	
 	public static int getDisplayPageSize() {
@@ -804,5 +1202,22 @@ public class Mem {
 			currAddr += PrincOpsDefs.WORDS_PER_PAGE;
 			currPage++;
 		}
+	}
+	
+	public static boolean locateRealDisplayMemoryInVMMap() {
+		int displayMemBaseAddress = displayFirstRealPage * PrincOpsDefs.WORDS_PER_PAGE;
+		displayFirstMappedVirtualPage = 0;
+		for (int page = 0; page < pageMap.length; page++) {
+			if (pageMap[page] == displayMemBaseAddress) {
+				// we found the location of the display in virtual memory
+				displayFirstMappedVirtualPage = page;
+				// make sure the screen is refreshed (e.g. after display is turned on after a world-swap)
+				for (int i = 0; i < displayPageSize; i++) {
+					pageFlags[displayFirstMappedVirtualPage + i] |= PrincOpsDefs.MAPFLAGS_DIRTY;
+				}
+				return true;
+			}
+		}
+		return false;
 	}
 }

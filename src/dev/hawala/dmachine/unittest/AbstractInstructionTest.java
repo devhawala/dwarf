@@ -435,7 +435,7 @@ public abstract class AbstractInstructionTest {
 	private void prepareCpuCommon() {
 		if (!memInitialized) {
 			// setup memory for 256 kwords = 512 kbytes real memeory and 512 kwords = 1 mbyzte virtual memory 
-			Mem.initializeMemory(PrincOpsDefs.MIN_REAL_ADDRESSBITS, PrincOpsDefs.MIN_REAL_ADDRESSBITS + 1);
+			Mem.initializeMemoryGuam(PrincOpsDefs.MIN_REAL_ADDRESSBITS, PrincOpsDefs.MIN_REAL_ADDRESSBITS + 1);
 			memInitialized = true;
 			firstUnmappedLongPointer = 1 << PrincOpsDefs.MIN_REAL_ADDRESSBITS;
 			firstUnmappedPage = firstUnmappedLongPointer >>> 8;

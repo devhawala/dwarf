@@ -26,6 +26,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.dmachine.engine.agents;
 
+import java.time.LocalDate;
 import java.util.Date;
 
 import dev.hawala.dmachine.engine.Cpu;
@@ -69,6 +70,23 @@ public class ProcessorAgent extends Agent {
 	// difference between (our) simulated GMT and (Pilots) expected GMT
 	private int gmtCorrection = 0;
 	
+	// work-around for XDE HeraldWindow having a blinking warning instead of the date
+	// if the "current" time is not in the expected time frame (somewhere between the bootfile
+	// build date and some (4 or 5) years later)
+	// so the system date can be faked (at a 2nd level :-)) to a given date for the first n-thousand
+	// instructions, so the HeraldWindow sees a specific date when it checks for a plausible boot time
+	// and the "correct" date is returned after that number of instructions when "the rest of XDE" asks
+	// for the time
+	private static long xdeNoBlinkInsnLimit = 0;
+	private static long xdeNoBlinkBaseMSecs = 0;
+	private static long xdeNoBlinkDateMSecs = 0;
+	
+	public static void installXdeNoBlinkWorkAround(LocalDate noBlinkTargetDate, long insnsLimit) {
+		xdeNoBlinkInsnLimit = insnsLimit;
+		xdeNoBlinkBaseMSecs = (System.currentTimeMillis() / 86_400_000L) * 86_400_000L; // midnight of today
+		xdeNoBlinkDateMSecs = noBlinkTargetDate.toEpochDay() * 86_400_000L; // date to be returned until insnsLimit instructions are reached
+	}
+	
 	public ProcessorAgent(int fcbAddress) {
 		super(AgentDevice.processorAgent, fcbAddress, FCB_SIZE);
 	}
@@ -92,12 +110,16 @@ public class ProcessorAgent extends Agent {
 			break;
 			
 		case Command_readGMT:
-			this.setFcbDblWord(fcb_dbl_gmt, this.getRawPilotTime() + gmtCorrection);
+			if (Cpu.insns > xdeNoBlinkInsnLimit) {
+				this.setFcbDblWord(fcb_dbl_gmt, getRawPilotTime() + gmtCorrection);
+			} else {
+				this.setFcbDblWord(fcb_dbl_gmt, getRawPilotTime(xdeNoBlinkDateMSecs + (System.currentTimeMillis() - xdeNoBlinkBaseMSecs)));
+			}
 			this.setFcbWord(fcb_w_status, Status_success);
 			break;
 			
 		case Command_writeGMT:
-			gmtCorrection = this.getFcbDblWord(fcb_dbl_gmt) - this.getRawPilotTime();
+			gmtCorrection = this.getFcbDblWord(fcb_dbl_gmt) - getRawPilotTime();
 			this.setFcbWord(fcb_w_status, Status_success);
 			break;
 			
@@ -117,7 +139,7 @@ public class ProcessorAgent extends Agent {
 		this.setFcbWord(fcb_w_alignmentFiller, 0);
 		this.setFcbDblWord(fcb_dbl_realMemoryPageCount, Mem.getRealPagesSize());
 		this.setFcbDblWord(fcb_dbl_virtualMemoryPageCount, Mem.getVirtualPagesSize());
-		this.setFcbDblWord(fcb_dbl_gmt, this.getRawPilotTime() + gmtCorrection);
+		this.setFcbDblWord(fcb_dbl_gmt, getRawPilotTime() + gmtCorrection);
 		this.setFcbWord(fcb_w_command, Command_noop);
 		this.setFcbWord(fcb_w_status, Status_success);
 	}
@@ -131,10 +153,15 @@ public class ProcessorAgent extends Agent {
 	// this is some unexplainable Xerox constant whatever for, but we have to use it...
 	private static final int MesaGmtEpoch = 2114294400;
 	
-	// get seconds since 1968-01-01 00:00:00
-	private int getRawPilotTime() {
-		long currJavaTimeInSeconds = System.currentTimeMillis() / 1000;
+	// get seconds since 1968-01-01 00:00:00 for a given Jaja milliseconds timestamp
+	private static int getRawPilotTime(long msecs) {
+		long currJavaTimeInSeconds = msecs / 1000;
 		return (int)((currJavaTimeInSeconds + UnixToPilotSecondsDiff + MesaGmtEpoch) & 0x00000000FFFFFFFFL);
+	}
+	
+	// get seconds since 1968-01-01 00:00:00 for "now"
+	private static int getRawPilotTime() {
+		return getRawPilotTime(System.currentTimeMillis());
 	}
 	
 	/**

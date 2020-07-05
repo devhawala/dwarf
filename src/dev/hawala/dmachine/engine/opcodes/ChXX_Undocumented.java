@@ -30,7 +30,6 @@ import dev.hawala.dmachine.engine.Cpu;
 import dev.hawala.dmachine.engine.Mem;
 import dev.hawala.dmachine.engine.Opcodes.OpImpl;
 import dev.hawala.dmachine.engine.PrincOpsDefs;
-import dev.hawala.dmachine.engine.agents.Agents;
 import dev.hawala.dmachine.engine.agents.ProcessorAgent;
 
 /**
@@ -40,25 +39,6 @@ import dev.hawala.dmachine.engine.agents.ProcessorAgent;
  * @author Dr. Hans-Walter Latz / Berlin (2017)
  */
 public class ChXX_Undocumented {
-	
-	/*
-	 * MAPDISPLAY - Map Display
-	 */
-	public static final OpImpl ESC_x8A_MAPDISPLAY = () -> {
-		int pageCountInEachBlock = Cpu.pop() & 0xFFFF;
-		int totalPageCount = Cpu.pop() & 0xFFFF;
-		int startingRealPage = Cpu.popLong();
-		int startingVirtualPage = Cpu.popLong();
-		
-		// sanity checks
-		if (startingRealPage != Mem.getDisplayRealPage()) { Cpu.ERROR("MAPDISPLAY :: startingRealPage != Mem.getDisplayRealPage()"); }
-		if (totalPageCount != Mem.getDisplayPageSize()) { Cpu.ERROR("MAPDISPLAY :: totalPageCount != Mem.getDisplayPageSize()"); }
-
-		// strange but this seems to be the right usage of the misleadingly named arguments (works both for 1-bit and 8-bit deep displays)...
-		int firstVirtualPage = startingVirtualPage + pageCountInEachBlock - totalPageCount;
-		
-		Mem.mapDisplayMemory(firstVirtualPage);
-	};
 	
 	/*
 	 *  VERSION - Microcode Version
@@ -110,24 +90,6 @@ public class ChXX_Undocumented {
 //		System.out.printf("## ESC x2F .. VERSION at 0x%08X+0x%04X [insn# %d]\n", Cpu.CB, Cpu.savedPC, Cpu.insns);
 	    Cpu.push((machineType.getTypeId() << 12) | 0x0002); // type + floatingPoint(?)
 	    Cpu.push(0x8482);                                   // Jan 1 1993 (?)
-	};
-	
-	/*
-	 *  BYTESWAP - Byte swap
-	 */
-	public static final OpImpl ESC_x87_BYTESWAP = () -> {
-		System.out.printf("## ESC x87 .. BYTESWAP at 0x%08X+0x%04X [insn# %d]\n", Cpu.CB, Cpu.savedPC, Cpu.insns);
-		int val = Cpu.pop() & 0xFFFF;
-		int res = (val << 8) | (val >>> 8);
-		Cpu.push(res);
-	};
-	
-	/*
-	 * CALLAGENT - Call Device Agent
-	 */
-	public static final OpImpl ESC_x89_CALLAGENT = () -> {
-		int agentIndex = Cpu.pop();
-		Agents.callAgent(agentIndex);
 	};
 	
 	/*

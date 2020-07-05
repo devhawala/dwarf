@@ -221,6 +221,39 @@ public class Opcodes {
 		postpareOpcodeTables();
 	}
 	
+	private static void innerImplant(int opcode, String opname, OpImpl impl, OpImpl[] tblOps, String[] tblNames)  {
+		if (opcode < 0 || opcode > 255) {
+			System.out.printf("** attempt to implant invalid opcode 0x%04X - %s\n", opcode, opname);
+			return;
+		}
+		tblOps[opcode] = (Config.LOG_OPCODES)
+			? () -> { Cpu.logOpcode(opname); impl.execute(); }
+			: impl;
+		tblNames[opcode] = opname;
+	}
+	
+	/**
+	 * Register the implementation for a regular instruction.
+	 * 
+	 * @param opcode (regular) opcode of the instruction
+	 * @param opname name of the instruction for logging
+	 * @param impl implementation of the opcode
+	 */
+	public static void implantOverride(int opcode, String opname, OpImpl impl) {
+		innerImplant(opcode, opname, impl, opcTable, opcNames);
+	}
+	
+	/**
+	 * Register the implementation for an ESC(L)-instruction.
+	 * 
+	 * @param opcode ESC(L)-relative opcode of the instruction
+	 * @param opname name of the instruction for logging
+	 * @param impl implementation of the opcode
+	 */
+	public static void implantEscOverride(int opcode, String opname, OpImpl impl) {
+		innerImplant(opcode, "ESC." + opname, impl, escTable, escNames);
+	}
+	
 	/**
 	 * Install the instruction implementations for an "new-style"
 	 * mesa engine (PrincOps post version 4.0),

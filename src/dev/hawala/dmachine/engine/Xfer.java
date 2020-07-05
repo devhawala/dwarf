@@ -286,14 +286,14 @@ public class Xfer {
 				
 				nLF = frame;
 				
-				Cpu.GF16 = Mem.readMDSWord(nLF, PrincOpsDefs.LocalOverhead_globallink);
+				Cpu.GF16 = Mem.readMDSWord(nLF, PrincOpsDefs.LocalOverhead_globallink) & 0xFFFF;
 				Cpu.GF32 = Cpu.MDS + Cpu.GF16;
 				if (Cpu.GF16 == 0) { Cpu.unboundTrap(nDst); }
 				
 				Cpu.CB = Mem.readMDSDblWord(Cpu.GF16, PrincOpsDefs.GlobalOverhead40_codebase);
 				if ((Cpu.CB & 0x00000001) != 0) { Cpu.codeTrap(Cpu.GF16); }
 				
-				nPC = Mem.readMDSWord(nLF, PrincOpsDefs.LocalOverhead_pc);
+				nPC = Mem.readMDSWord(nLF, PrincOpsDefs.LocalOverhead_pc) & 0xFFFF;
 				if (nPC == 0) { Cpu.unboundTrap(dst); }
 				
 				if (xferType == XferType.xtrap) {
