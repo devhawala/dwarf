@@ -906,7 +906,7 @@ public class HEthernet extends DeviceHandler {
 		putWord(25, (short)bfn2);
 		
 		// and send it
-		sendPacket(zeNet, 26);
+		sendPacket(zeNet, 30); // real ethernet length is 26 words, but minimal length is 60 bytes
 		
 		boolean done = false;
 		while (!done && ok) {

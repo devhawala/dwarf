@@ -64,15 +64,15 @@ mentioned above.
 
 Duchess running GlobalView 2.1 in color mode (sample script `duchess-gvwin-color[.sh]`):
 
-![Duchess with GV2.1](duchess-gvwin-2.1.png)
+![Duchess with GV2.1](images/duchess-gvwin-2.1.png)
 
 Draco running the XDE 5.0 with hacks disk (sample script `draco-xde5.0+hacks[.sh]`):
 
-![Draco with XDE 5.0](draco-xde5.0_2xTajo+hacks.png)
+![Draco with XDE 5.0](images/draco-xde5.0_2xTajo+hacks.png)
 
 Draco running the ViewPoint 2.0 disk (sample script `draco-vp2.0.5[.sh]`):
 
-![Draco with ViewPoint 2.0](draco-vp2.0.5.png)
+![Draco with ViewPoint 2.0](images/draco-vp2.0.5.png)
 
 ### Working characteristics of Dwarf
 
