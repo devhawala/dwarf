@@ -31,7 +31,11 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Font;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
+import java.awt.Rectangle;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowEvent;
 
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -83,20 +87,32 @@ public class MainUI {
 	 * @param displayHeight the pixel height of the mesa display
 	 * @param resizable should the top level window be resizable?
 	 * @param colorDisplay is this a color (8-bit color lookup table) display machine?
+	 * @param runInFullscreen let it be a fullscreen application?
 	 */
-	public MainUI(String emulatorName, String title, int displayWidth, int displayHeight, boolean resizable, boolean colorDisplay) {
+	public MainUI(String emulatorName, String title, int displayWidth, int displayHeight, boolean resizable, boolean colorDisplay, boolean runInFullscreen) {
 		this.title = title;
 		this.displayWidth = displayWidth;
 		this.displayHeight = displayHeight;
-		initialize(emulatorName, resizable, colorDisplay);
+		initialize(emulatorName, resizable, colorDisplay, runInFullscreen);
 	}
 
 	// Initialize the contents of the frame.
-	private void initialize(String emulatorName, boolean resizable, boolean colorDisplay) {
+	private void initialize(String emulatorName, boolean resizable, boolean colorDisplay, boolean runInFullscreen) {
 		this.frmDwarfMesaEngine = new JFrame();
 		this.frmDwarfMesaEngine.setTitle(emulatorName + " Mesa Engine - " + this.title);
 		this.frmDwarfMesaEngine.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		this.frmDwarfMesaEngine.getContentPane().setLayout(new BorderLayout(2, 2));
+		
+		if (runInFullscreen) {
+			this.frmDwarfMesaEngine.setUndecorated(true);
+			this.frmDwarfMesaEngine.setResizable(false);
+			GraphicsEnvironment graphics = GraphicsEnvironment.getLocalGraphicsEnvironment();
+			GraphicsDevice device = graphics.getDefaultScreenDevice();
+			if (device.isFullScreenSupported()) {
+				device.setFullScreenWindow(this.frmDwarfMesaEngine);
+				resizable = false;
+			}
+		}
 		
 		this.toolBar = new JToolBar();
 		this.toolBar.setFloatable(false);
@@ -256,6 +272,63 @@ public class MainUI {
 			this.btnEjectFloppy.setEnabled(true);
 		}
 	}
+	
+	/**
+	 * Determine if fullscreen is supported and if so the available size for the
+	 * the Mesa engine display.
+	 * 
+	 * @return the rectangle having the available size for die Mesa display or {@code null}
+	 *      if fullscreen is not supported or possible.
+	 */
+	public static Rectangle getFullscreenUsableDims() {
+		
+		// build a dummy UI with the same vertical layout as the real one
+		JFrame frame = new JFrame("Fullscreen");
+		frame.getContentPane().setLayout(new BorderLayout(2, 2));
+		
+		JToolBar toolBar = new JToolBar();
+		toolBar.setFloatable(false);
+		toolBar.setOrientation(SwingConstants.HORIZONTAL);
+		frame.getContentPane().add(toolBar, BorderLayout.NORTH);
+		
+		JButton btnStart = new JButton("Start");
+		btnStart.setToolTipText("boot the mesa engine");
+		toolBar.add(btnStart);
+		
+		JButton btnStop = new JButton("Stop");
+		btnStop.setToolTipText("stop the running engine and persist disk(s) modifications");
+		toolBar.add(btnStop);
+		btnStop.addActionListener(e -> { frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING)); System.exit(0); });
+		
+		JLabel label = new JLabel("", JLabel.CENTER);
+		label.setText("This is not yet in fullscreen mode!");
+		label.setOpaque(true);
+		frame.getContentPane().add(label, BorderLayout.CENTER);
+		
+		JLabel statusLine = new JLabel(" This is a dummy status line");
+		statusLine.setFont(new Font("Monospaced", Font.BOLD, 12));
+		frame.getContentPane().add(statusLine, BorderLayout.SOUTH);
+		
+		// try to display the dummy UI in fullscreen mode to get the max. size of the Mesa machine display
+		Rectangle innerRectangle = null;
+		frame.setUndecorated(true);
+		frame.setResizable(false);
+		GraphicsEnvironment graphics = GraphicsEnvironment.getLocalGraphicsEnvironment();
+		GraphicsDevice device = graphics.getDefaultScreenDevice();
+		if (device.isFullScreenSupported()) {
+			device.setFullScreenWindow(frame); // switch to fullscreen
+			innerRectangle = label.getBounds();// the the net display region size
+			device.setFullScreenWindow(null);  // leave fullscreen mode
+		}
+		
+		// remove the dummy UI from the display
+		frame.setVisible(false);
+		frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING));
+		try { Thread.sleep(200); } catch (InterruptedException e1) { }
+		
+		// done
+		return innerRectangle;
+	}
 
 	/*
 	 * (for tests only) display the UI by launching the application.
@@ -265,7 +338,7 @@ public class MainUI {
 			public void run() {
 				try {
 					if (!allowMainStartup) { return; }
-				MainUI window = new MainUI("Test", "this is a test", 1024, 640, true, false);
+				MainUI window = new MainUI("Test", "this is a test", 1024, 640, true, false, false);
 					window.frmDwarfMesaEngine.setVisible(true);
 				} catch (Exception e) {
 					e.printStackTrace();

@@ -27,6 +27,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package dev.hawala.dmachine;
 
 import java.awt.EventQueue;
+import java.awt.Rectangle;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.io.File;
@@ -193,6 +194,7 @@ public class Duchess {
 		floppyDirectory = props.getString("floppyDirectory", floppyDirectory);
 		keyboardMapFile = props.getString("keyboardMapFile", keyboardMapFile);
 		doStartEngine = props.getBoolean("autostart", doStartEngine);
+		doTerminate = props.getBoolean("autoclose", doTerminate);
 		netHubHost = props.getString("netHubHost", netHubHost);
 		netHubPort = props.getInt("netHubPort", netHubPort);
 		localTimeOffsetMinutes = props.getInt("localTimeOffsetMinutes", localTimeOffsetMinutes);
@@ -257,7 +259,7 @@ public class Duchess {
 		window.setFloppyName(floppyPrefix + floppyFile.getName());
 	}
 	
-	private static void dumpConfiguration() {
+	private static void dumpConfiguration(boolean fullscreenRequested) {
 		System.out.printf("Configuration from %s\n", configFilename);
 		System.out.printf(" germ file   : %s\n", germFile);
 		System.out.printf(" switches    : %s\n", switches);
@@ -265,7 +267,7 @@ public class Duchess {
 		System.out.printf(" deltas limit: %d\n", oldDeltasToKeep);
 		System.out.printf(" bits virtual: %d\n", addressBitsVirtual);
 		System.out.printf(" bits real   : %d\n", addressBitsReal);
-		System.out.printf(" display     : w( %d ) x h( %d ) - %s display\n", displayWidth, displayHeight, displayTypeColor ? "color" : "b/w");
+		System.out.printf(" display     : w( %d ) x h( %d ) - %s display%s\n", displayWidth, displayHeight, displayTypeColor ? "color" : "b/w", fullscreenRequested ? ", fullscreen if possible" : "");
 		System.out.printf(" keyboardMap : %s\n", (keyboardMapFile != null) ? keyboardMapFile : "");
 		System.out.printf(" xeroxCtrlKey: 0x%08X\n", xeroxControlKeyCode);
 		System.out.printf(" resetKeysOnF: %s\n", (resetKeysOnFocusLost)  ? "yes" : "no");
@@ -285,6 +287,7 @@ public class Duchess {
 		boolean logKeyPressed = false;
 		boolean doMerge = false;
 		String cfgFile = null;
+		boolean doFullscreen = false;
 		
 		// command line parameters pass 1: check for test only OR run configuration
 		for (String arg : args) {
@@ -322,13 +325,17 @@ public class Duchess {
 						logKeyPressed = true;
 					} else if ("-merge".equalsIgnoreCase(arg)) {
 						doMerge = true;
+					} else if ("-autoclose".equalsIgnoreCase(arg)) {
+						doTerminate = true;
+					} else if ("-fullscreen".equalsIgnoreCase(arg)) {
+						doFullscreen = true;
 					} else {
 						System.out.printf("Warning: ignoring unknown command line argument: %s\n", arg);
 					}
 				}
 			}
 			if (dumpConfig) { 
-				dumpConfiguration();
+				dumpConfiguration(doFullscreen);
 			}
 		}
 		
@@ -353,6 +360,18 @@ public class Duchess {
 			// test mode
 			uiDataConsumer = new TestUiDataConsumer(DEFAULT_DISPLAY_WIDTH, DEFAULT_DISPLAY_HEIGHT);
 		} else {
+			// get fullscreen display size for the Mesa engine display if requested
+			if (doFullscreen) {
+				Rectangle dims = MainUI.getFullscreenUsableDims();
+				if (dims != null) {
+					displayWidth = dims.width;
+					displayHeight = dims.height;
+					doTerminate = true;
+				} else {
+					doFullscreen = false;
+				}
+			}
+			
 			// setup the mesa machine
 			
 			// set processor id (aka MAC address)
@@ -393,10 +412,11 @@ public class Duchess {
 		
 		// create and start the ui
 		boolean logKeys = logKeyPressed;
+		boolean runInFullscreen = doFullscreen;
 		EventQueue.invokeLater(() -> {	
 			try {	
 				// setup the ui main window
-				window = new MainUI("Dwarf / Duchess", title, displayWidth, displayHeight, true, displayTypeColor); // TODO: make resizable a program/configuration parameter?
+				window = new MainUI("Dwarf / Duchess", title, displayWidth, displayHeight, true, displayTypeColor, runInFullscreen); // TODO: make resizable a program/configuration parameter?
 				window.getFrame().setVisible(true);
 				
 				// attach the mouse and keyboard handlers (java-ui => mesa engine) 
@@ -513,10 +533,10 @@ public class Duchess {
 					
 					// inform the user about why the mesa engine halted
 					System.out.printf("\n***\n*** processor exited: %s\n***\n", finalMessage);
-					uiRefresher.setEngineEndedMessage(finalMessage);
 					window.setRunningState(RunningState.stopped);
 					
 					// shutdown the agents to save changes to the harddisk and a possibly mounted virtual floppy
+					uiRefresher.setEngineEndedMessage(finalMessage + " -- saving disk(s) state");
 					StringBuilder errMsgTarget = new StringBuilder();
 					Agents.shutdown(errMsgTarget);
 					if (errMsgTarget.length() > 0) {
@@ -528,6 +548,7 @@ public class Duchess {
 								"Error(s) shutting down mesa engine devices",
 								JOptionPane.OK_OPTION);
 					}
+					uiRefresher.setEngineEndedMessage(finalMessage + " -- disk(s) state saved, OK to close window");
 					
 					// terminate Dwarf if requested so
 					synchronized(lock) {

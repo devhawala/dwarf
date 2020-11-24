@@ -88,7 +88,7 @@ Besides a mesa processor, Dwarf supports the following peripherals found on a Xe
 
 - bitmapped display rendered in a Java Swing window
   - Draco: small (832x633) or large (1152x861) 6085 black&white screen
-  - Duchess: configurable size as black&white or (8-bit) color display, 
+  - Duchess: black&white or (8-bit) color display in configurable size or as fullscreen display, 
 
 - keyboard (with configurable mapping for Xerox specials keys)
 
@@ -255,6 +255,12 @@ building up the Dwarf UI; by default, the Dwarf machine must be started
 manually with the _Start_ button in the toolbar.  
 _optional, default_: `false`
 
+- `autoclose`    
+the boolean value `true` lets the Dwarf UI automatically close when the Mesa
+processor is stopped and after changes made to the disk (and possibly to the floppy)
+have been saved.    
+_optional, default_: `false`
+
 - `xdeNoBlinkWorkAround`    
 work-around for the blinking "Time not set! Create no files!" text in the HeraldWindow
 instead of the current date/time.    
@@ -413,7 +419,24 @@ instead of running the mesa emulator, merge the current delta for the boot disk 
 the harddisk image file; the current disk file, the delta and all backup deltas are
 archived into a zip file (named after the disk file and the current timestamp) and all
 delta files are deleted before doing the merge.  
-_optional_ (as alternative to running the mesa engine) 
+_optional_ (as alternative to running the mesa engine)
+
+- `-autoclose`    
+giving this option has the same effect as setting the option `autoclose`to `true` in the
+configuration file, so the Dwarf UI will automatically close after the Mesa processor is
+stopped and changes made to the disk (and possibly to the floppy) have been saved.
+
+When running the Duchess emulator, the following command line parameters allows
+to run the Dwarf UI in fullscreen mode:
+
+- `-fullscreen`    
+if this option is given, the Duchess UI will try to switch to fullscreen mode,
+that is the UI fills the whole screen and is shown without decorations, so the mesa machine
+display takes the whole space between the button bar at the upper border and the status
+line at the lower border of the screen (see below). If the fullscreen mode cannot be used on the
+window system of the hosting operating system, a normal window will be used with the
+Mesa machine display having the size specified by the parameters `displayWidth` and
+`displayHeight`. 
 
 When running the Draco emulator, the following command line parameters allow to
 boot the system from the network instead of the disk specified in the configuration
@@ -571,6 +594,10 @@ This does however not affect the normal disk operations, as ViewPoint and the XD
 (seem to) work normally with the same implementation.
 
 ### Development history
+
+- 2020-11-24    
+added fullscreen support for Duchess (command line option `-fullscreen`)    
+added `autoclose`configuration parameter and `-autoclose` command line parameter to Duchess and Draco
 
 - 2020-07-05    
 introduced the Draco 6085 emulation as second machine type for the Dwarf Mesa machine kernel    

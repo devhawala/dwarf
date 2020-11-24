@@ -217,6 +217,7 @@ public class Draco {
 		if (germFile != null && !Utils.isFileOk("germ", germFile)) { return false; }
 		bootSwitches = props.getString("switches", DEFAULT_SWITCHES);
 		doStartEngine = props.getBoolean("autostart", doStartEngine);
+		doTerminate = props.getBoolean("autoclose", doTerminate);
 		
 		labelOpOnRead = scanVerifyLabelOp(props.getString("labelOpOnRead"), "option labelOpOnRead");
 		labelOpOnWrite = scanVerifyLabelOp(props.getString("labelOpOnWrite"), "option labelOpOnWrite");
@@ -442,6 +443,8 @@ public class Draco {
 					logKeyPressed = true;
 				} else if ("-merge".equalsIgnoreCase(arg)) {
 					doMerge = true;
+				} else if ("-autoclose".equalsIgnoreCase(arg)) {
+					doTerminate = true;
 				} else if ("-netexec".equalsIgnoreCase(arg)) {
 					doNetboot = true;
 					bootFileNumber = InitialMesaMicrocode.BFN_Daybreak_SimpleNetExec;
@@ -574,7 +577,7 @@ public class Draco {
 				// setup the ui main window
 				int displayWidth = Mem.displayPixelWidth;
 				int displayHeight = Mem.displayPixelHeight;
-				window = new MainUI("Dwarf / Draco 6085", title, displayWidth, displayHeight, true, false); // TODO: make resizable a program/configuration parameter?
+				window = new MainUI("Dwarf / Draco 6085", title, displayWidth, displayHeight, true, false, false); // TODO: make resizable a program/configuration parameter?
 				window.getFrame().setVisible(true);
 				
 				// attach the mouse and keyboard handlers (java-ui => mesa engine) 
