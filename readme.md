@@ -595,6 +595,9 @@ This does however not affect the normal disk operations, as ViewPoint and the XD
 
 ### Development history
 
+- 2021-11-05    
+added 3 undocumented instructions, apparently introduced by Fuji Xerox (impl. taken from Yasuhiro Hasegawa's Guam emulator
+
 - 2020-11-24    
 added fullscreen support for Duchess (command line option `-fullscreen`)    
 added `autoclose`configuration parameter and `-autoclose` command line parameter to Duchess and Draco

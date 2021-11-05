@@ -273,5 +273,27 @@ public class ChXX_Undocumented {
 		Cpu.push(found);
 		Cpu.push(pRun);
 	};
+	
+	/*
+	 * undocumented Fuji-Xerox (?) instructions implemented in Yasuhiro Hasegawa's Guam emulator
+	 */
+	
+	public static final OpImpl ESC_x8C_FujiXerox_undocumented_o214 = () -> {
+		//System.out.printf("--- ESC_x8C_FujiXerox_undocumented_o214\n");
+		Cpu.popLong();
+		Cpu.popLong();
+		Cpu.popLong();
+		Cpu.push(0);
+	};
+	
+	public static final OpImpl ESC_xC5_FujiXerox_undocumented_o305 = () -> {
+		//System.out.printf("--- ESC_xC5_FujiXerox_undocumented_o305\n");
+	};
+	
+	public static final OpImpl ESC_xC6_FujiXerox_undocumented_o306 = () -> {
+		//System.out.printf("--- ESC_xC6_FujiXerox_undocumented_o306\n");
+		Cpu.pop();
+		Cpu.push(0);
+	};
 
 }
