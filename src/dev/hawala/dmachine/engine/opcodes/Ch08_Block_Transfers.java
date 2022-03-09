@@ -1420,6 +1420,312 @@ public class Ch08_Block_Transfers {
 	// TXTBLT - Text Block Transfer - delegated to software implementation
 	// (by explicitly calling Cpu.thrower.signalEscOpcodeTrap() to suppress the "unimplemented" log line)
 	public static final OpImpl ESC_x2C_TXTBLT = () -> {
+		//logf("++ ESC_x2C_TXTBLT\n");
 		Cpu.thrower.signalEscOpcodeTrap(0x2C);
+	};
+	
+	/*
+	 * #########################################################################################################
+	 */
+	
+	private static void logf(String format, Object... args) {
+		System.out.printf(format, args);
+	}
+	
+	/*
+	   TBptr, TrapezoidBltTablePtr: TYPE = LONG POINTER TO TBTable;
+	   
+	   TBTable, TrapezoidBltTable: TYPE = MACHINE DEPENDENT RECORD [
+	      dst (0): BitAddress,         -- of 1st line of destination bitmap
+	      dstBpl (3): INTEGER,         -- destination width, in bits per line
+	      src (4): BitAddress,         -- 1st gray bit to be copied into 1st scanline
+	      misc (7): TrapezoidBltMisc,  -- gray description
+	      xMin (8): Interpolator,      -- one side of the trapezoid
+	      xMax (12): Interpolator,     -- other side of the trapezoid
+	      height (16): CARDINAL];      -- height of trapezoid in scanlines
+	   ];
+	   
+	   TrapezoidBltMisc: TYPE = MACHINE DEPENDENT RECORD [
+	      srcFunc (0:0..0): SrcFunc ¬ null,	 -- as in BitBlt.BitBltFlags
+	      dstFunc (0:1..2): DstFunc ¬ null,
+	      reserved (0:3..3): [0..1] ¬ 0,
+	      yOffset (0:4..7): [0..15],	 	-- as in BitBlt.GrayParm
+	      widthMinusOne (0:8..11): [0..15],	-- restricted to 0 for initial microcode implementations
+	      heightMinusOne (0:12..15): [0..15]
+	   ];
+	 */
+	
+	private static class Interpolator{
+		private int val;
+		private final int delta;
+		
+		private int currInt;
+		
+		private Interpolator(int address) {
+			this.val = Mem.readDblWord(address);
+			this.delta = Mem.readDblWord(address + 2);
+			this.currInt = this.val >> 16;
+		}
+		
+		private int step() {
+			this.val += this.delta;
+			this.currInt = this.val >> 16;
+			return this.currInt;
+		}
+		
+		private int get() {
+			return this.currInt;
+		}
+		
+		@Override
+		public String toString() {
+			return String.format("Interpolator[ val: %d.x%04X , delta: %d.x%04X ]",
+					this.val >> 16, this.val & 0xFFFF, this.delta >> 16, this.delta & 0xFFFF);
+		}
+	}
+
+	/**
+	 * Sink for true bitmaps in memory, with caching of complete pixel lines allowing to
+	 * always process the pixels on a line from left to right. 
+	 */
+	private static class BitmapForwardPixelSink implements PixelSink {
+		
+		private final int pixelMask; // mask to get a pixel out of a word after shifting to low bits
+		
+		private final int bitsPerLine;   // line length in bits (pixelsPerLine * bitsPerPixel)
+		
+		private final int pixelTransferWidth; // pixels to transfer per line
+		
+		private final int wordsPerLine; // number of words to buffer for a single line
+		
+		private final int[] lineCache;
+		
+		private int lpLineStart; // LongPointer to 1st word of current pixel line 
+		
+		private int pixelOffset; // position of 1st pixel in *lpLineStart
+		
+		private int currPixWordOffs = 0; // offset of current word with pixels last read/written from Mem
+		
+		
+		private int pixWord; // the word containing the current pixel
+		private int pixWordOffs; // offset of the word with the current pixel
+		private int pixShift; // distance to shift the bits extracted with pixMask to the lower end of the word
+		
+		public BitmapForwardPixelSink(
+				int lpLineStart,
+				int pixelOffset,
+				int pixelsPerLine,
+				int transferWidth) {
+			// setup finals
+			this.pixelMask = 1;
+			this.bitsPerLine = Math.abs(pixelsPerLine); // negative if backward...
+			this.pixelTransferWidth = transferWidth;
+			this.wordsPerLine 
+				= ((Math.abs(pixelOffset) + Math.abs(transferWidth)) + PrincOpsDefs.WORD_BITS - 1) / PrincOpsDefs.WORD_BITS
+				+ (((Math.abs(transferWidth) % 16) != 0) ? 1 : 0);
+			this.lineCache = new int[this.wordsPerLine];
+			
+			// setup other members
+			int bitsOffset = pixelOffset;
+			this.lpLineStart = lpLineStart + (bitsOffset / PrincOpsDefs.WORD_BITS);
+			this.pixelOffset = pixelOffset - ((this.lpLineStart - lpLineStart) * PrincOpsDefs.WORD_BITS);
+			this.pixShift = PrincOpsDefs.WORD_BITS - (bitsOffset % PrincOpsDefs.WORD_BITS) - 1;
+			
+			this.pixWordOffs = 0;
+			this.currPixWordOffs = 0;
+			this.pixWord = 0;
+		}
+
+		@Override
+		public void moveToNextLine() {
+			int oldBitsOffset = this.pixelOffset;
+			
+			int nextBitsOffset = oldBitsOffset + this.bitsPerLine;
+			int wordsToAdd = nextBitsOffset / PrincOpsDefs.WORD_BITS;
+			int newBitsOffset = nextBitsOffset % PrincOpsDefs.WORD_BITS;
+
+			this.lpLineStart += wordsToAdd;
+			this.pixelOffset = newBitsOffset;
+			this.pixShift = PrincOpsDefs.WORD_BITS - newBitsOffset - 1;
+		}
+		
+		@Override
+		public void loadLineCache() {
+			int wordsToCache = ((this.pixelOffset + this.pixelTransferWidth) + PrincOpsDefs.WORD_BITS - 1) / PrincOpsDefs.WORD_BITS;
+			if (wordsToCache > wordsPerLine) {
+				System.out.flush();
+				System.err.printf(
+						"## wordsToCache(%d) > wordsPerLine(%d) <<== pixelOffset(%d) , bitsPerLine(%d)\n", 
+						wordsToCache, wordsPerLine, pixelOffset, bitsPerLine);
+			}
+			for (int i = 0; i < wordsToCache /*this.wordsPerLine*/; i++) {
+				this.lineCache[i] = Mem.readWord(this.lpLineStart + i);
+			}
+			this.pixWordOffs = 0;
+			this.currPixWordOffs = 0;
+			this.pixWord = this.lineCache[this.currPixWordOffs];
+		}
+		
+		@Override
+		public void moveToNextPixel() {
+			this.pixShift -= 1;
+			if (this.pixShift < 0) {
+				this.pixWordOffs++;
+				this.pixShift = PrincOpsDefs.WORD_BITS - 1;
+			}
+		}
+
+		@Override
+		public int getCurrPixel() {
+			if (this.currPixWordOffs != this.pixWordOffs) {
+				this.flush();
+				this.pixWord = this.lineCache[this.pixWordOffs];
+				this.currPixWordOffs = this.pixWordOffs;
+			}
+			
+			return (this.pixWord >> this.pixShift) & this.pixelMask;
+		}
+
+		@Override
+		public void setCurrPixel(int newValue) {
+			if (this.currPixWordOffs != this.pixWordOffs) {
+				this.flush();
+				this.pixWord = this.lineCache[this.pixWordOffs];
+				this.currPixWordOffs = this.pixWordOffs;
+			}
+			
+			this.pixWord
+				= (this.pixWord & ~(this.pixelMask << this.pixShift))
+				| ((newValue & this.pixelMask) << this.pixShift);
+		}
+		
+		@Override
+		public void flush() {
+			Mem.writeWord(this.lpLineStart + this.currPixWordOffs, (short)(this.pixWord & 0xFFFF));
+		}
+		
+	}
+	
+	private static void runSubBITBLT(
+				PixelSource pixelSource,
+				PixelSink pixelSink,
+				PixelCombiner combiner,
+				int width,
+				int remainingLines
+			) {
+		
+		if (remainingLines <= 0 || pixelSource == null || pixelSink == null) {
+			return;
+		}
+		
+		while(remainingLines > 0) {
+			// prepare processing of this line (this may cause memory faults)
+			pixelSource.loadLineCache();
+			pixelSink.loadLineCache();
+			
+			// process pixels in the line
+			for (int i = 0; i < width; i++) {
+				
+				int srcPixel = pixelSource.getCurrPixel();
+				int oldDstPixel = pixelSink.getCurrPixel();
+				
+				int newDstPixel = combiner.combine(srcPixel, oldDstPixel);
+				pixelSink.setCurrPixel(newDstPixel);
+				
+				pixelSource.moveToNextPixel();
+				pixelSink.moveToNextPixel();
+			}
+			pixelSink.flush();
+			
+			// this line is done
+			if (remainingLines-- > 1) {
+				pixelSource.moveToNextLine();
+				pixelSink.moveToNextLine();
+			}
+		}
+	}
+	
+	public static final OpImpl ESC_xA4_TRAPZBLT = () -> {
+		int tbPtr = Cpu.popLong();
+//		logf("\n++++++ ESC_xA4_TRAPZBLT ( tbPtr: 0x%06X )\n", tbPtr);
+		int dstWordPtr     = Mem.readDblWord(tbPtr + 0);
+		// (unused!) int dstPixel       = Mem.readWord(tbPtr + 2) & 0xFFFF;
+		int dstBpl         = Mem.readWord(tbPtr + 3) & 0xFFFF;
+		int srcWordPtr     = Mem.readDblWord(tbPtr + 4);
+		int srcPixel       = Mem.readWord(tbPtr + 6) & 0xFFFF;
+		int misc           = Mem.readWord(tbPtr + 7) & 0xFFFF;
+		Interpolator xMin  = new Interpolator(tbPtr + 8);
+		Interpolator xMax  = new Interpolator(tbPtr + 12);
+		int height         = Mem.readWord(tbPtr + 16) & 0xFFFF;
+		
+		if (height == 0) {
+			// what ??
+			return;
+		}
+		
+		SrcFunc srcFunc        = ((misc & 0x8000) == 0) ? SrcFunc.fnull : SrcFunc.fcomplement;
+		DstFunc dstFunc        = DSTFUNC_MAP_BITBLT[((misc & 0x6000) >>> 13)];
+		int     yOffset        = (misc & 0x0F00) >> 8;
+		int     widthMinusOne  = (misc & 0x00F0) >> 4;
+		int     heightMinusOne = misc & 0x000F;
+		
+//		logf("++  dstWordPtr = 0x%06X\n", dstWordPtr);
+//		logf("++  dstPixel   = %d\n", dstPixel);
+//		logf("++  dstBpl     = %d\n", dstBpl );
+//		logf("++  srcWordPtr = 0x%06X\n", srcWordPtr);
+//		logf("++  srcPixel   = %d\n", srcPixel);
+//		logf("++  misc       = 0x%04X\n", misc);
+//		logf("++      srcFunc        = %s\n", srcFunc.toString());
+//		logf("++      dstFunc        = %s\n", dstFunc.toString());
+//		logf("++      yOffset        = %d\n", yOffset);
+//		logf("++      widthMinusOne  = %d\n", widthMinusOne);
+//		logf("++      heightMinusOne = %d\n", heightMinusOne);
+//		logf("++  xMin       = %s\n", xMin.toString());
+//		logf("++  xMax       = %s\n", xMax.toString());
+//		logf("++  height     = %d\n", height);
+		
+		int wordsPerDstLine = dstBpl / 16;
+		
+		int currXMin = xMin.get();
+		int currXMax = xMax.get();
+		int currWidth = Math.max(currXMax - currXMin, 1);
+		int currHeight = 1;
+
+		int dstBitAdjust = srcPixel + 16 - (currXMin % 16);
+		int gray_BASE = srcWordPtr - yOffset;
+	    int gray_LENGTH = heightMinusOne + 1;
+	    
+	    int dstWord = currXMin / 16;
+	    int dstBit = currXMin % 16;
+	    
+		PixelCombiner combiner = getCombiner(srcFunc, dstFunc);
+		
+		PixelSource pixelSource = new MonochromePackedPatternPixelSource(gray_BASE + yOffset, (dstBit+dstBitAdjust) % 16, yOffset, widthMinusOne, heightMinusOne);
+		PixelSink pixelSink = new BitmapForwardPixelSink(dstWordPtr + dstWord, dstBit, dstBpl, currWidth);
+		for (int i = 1; i < height; i++) {
+			dstWordPtr += wordsPerDstLine;
+			yOffset = (yOffset + 1) % gray_LENGTH;
+			
+			int newXMin = xMin.step();
+			int newXMax = xMax.step();
+			if (newXMin == currXMin && newXMax == currXMax) {
+				currHeight++;
+				continue;
+			}
+			
+			runSubBITBLT(pixelSource, pixelSink, combiner, currWidth, currHeight);
+			
+			currXMin = newXMin;
+			currXMax = newXMax;
+			currWidth = Math.max(currXMax - currXMin, 1);
+
+		    dstWord = currXMin / 16;
+		    dstBit = currXMin % 16;
+			
+		    pixelSource = new MonochromePackedPatternPixelSource(gray_BASE + yOffset, (dstBit+dstBitAdjust) % 16, yOffset, widthMinusOne, heightMinusOne);
+		    pixelSink = new BitmapForwardPixelSink(dstWordPtr + dstWord, dstBit, dstBpl, currWidth);
+		    currHeight = 1;
+		}
+		runSubBITBLT(pixelSource, pixelSink, combiner, currWidth, currHeight);
 	};
 }
