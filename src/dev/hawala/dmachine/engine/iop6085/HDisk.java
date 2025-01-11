@@ -1924,18 +1924,34 @@ public class HDisk extends DeviceHandler {
 		// assuming that linearSector is valid!
 		public boolean /* same? */ verifySectorLabel(int linearSector, CDF_Label label) {
 			short[] rawSector = this.sectors[linearSector];
+			
+			/*
+			 * see: APilot/15.0.1/Faces/Private/CompatibilityDiskFace.mesa, lines 58..62 ::
+			 * 
+			 *     When verifying labels, the following fields must match and must be
+			 *     the same in every page of a run of pages:
+			 *         fileID and attributesInAllPages
+			 *     The field pageZeroAttributes must match in page zero of a file and
+			 *     must be zero in every other page of a file.
+			 *     
+			 */
+			
+			if (rawSector[offsetLabel+6] == 0 && (rawSector[offsetLabel+7] & 0xFF00) == 0
+					&& (label.filePageHiAndPageZeroAttributes.get() & 0x00FF) != (rawSector[offsetLabel+7] & 0x00FF)) {
+				return false;
+			}
+
 			int sectorWord = offsetLabel;
 			return label.fileID_0.get() == rawSector[sectorWord++]
 				&& label.fileID_1.get() == rawSector[sectorWord++]
 				&& label.fileID_2.get() == rawSector[sectorWord++]
 				&& label.fileID_3.get() == rawSector[sectorWord++]
 				&& label.fileID_4.get() == rawSector[sectorWord++]
-				&& label.filePageLo.get() == rawSector[sectorWord++]
-				// && label.filePageHiAndPageZeroAttributes.get() == rawSector[sectorWord++]
-				&& (label.filePageHiAndPageZeroAttributes.get() & 0x00FF) == (rawSector[sectorWord++] & 0x00FF) // ignore page0 attribute
+				&& sectorWord++ > 0 // skip: filePageLo
+				&& sectorWord++ > 0 // skip: filePageHiAndPageZeroAttributes
 				&& label.attributesInAllPages.get() == rawSector[sectorWord++]
-				&& label.dontCare0.get() == rawSector[sectorWord++]
-				&& label.dontCare1.get() == rawSector[sectorWord++];
+				                    // ignore: dontCare0 and dontCare1
+				;
 		}
 		
 		// assuming that linearSector is valid!

@@ -31,7 +31,6 @@ import static dev.hawala.dmachine.engine.Mem.writeField;
 
 import dev.hawala.dmachine.engine.Cpu.MesaAbort;
 import dev.hawala.dmachine.engine.Xfer.XferType;
-import dev.hawala.dmachine.engine.agents.Agents;
 
 /**
  * Basic data structures and common functions for handling processes

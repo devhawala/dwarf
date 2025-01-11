@@ -32,7 +32,6 @@ import java.util.function.BooleanSupplier;
 
 import javax.swing.JOptionPane;
 
-import dev.hawala.dmachine.Duchess;
 import dev.hawala.dmachine.engine.Processes;
 
 /**

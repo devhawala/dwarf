@@ -595,6 +595,9 @@ This does however not affect the normal disk operations, as ViewPoint and the XD
 
 ### Development history
 
+- 2025-01-11    
+bugfix for issue#12: less restrictive label-check for 6085 disks 
+
 - 2022-03-09    
 added simple implementation of instruction TRAPZBLT
 

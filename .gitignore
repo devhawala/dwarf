@@ -1,6 +1,7 @@
 /bin/
 dist-bld
 /dwarf
+/tests
 .readme.md.html
 dwarf.jardesc
 dwarf.manifest

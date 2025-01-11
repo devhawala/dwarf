@@ -30,7 +30,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.function.Supplier;
 
-import dev.hawala.dmachine.Duchess;
 import dev.hawala.dmachine.engine.iMesaMachineDataAccessor;
 import dev.hawala.dmachine.engine.iUiDataConsumer;
 import dev.hawala.dmachine.engine.iUiDataConsumer.PointerBitmapAcceptor;
