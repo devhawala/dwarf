@@ -72,6 +72,18 @@ public class UiRefresher implements ActionListener, iMesaMachineDataAccessor, Po
 	private short[] newCursorBitmap = null;
 	private int newCursorHotspotX = 0;
 	private int newCursorHotspotY = 0;
+
+	// last cursor shape sent by the Mesa engine, kept so it can be restored when MP returns to 8000
+	private short[] lastNormalCursorBitmap = null;
+	private int lastNormalCursorHotspotX = 0;
+	private int lastNormalCursorHotspotY = 0;
+
+	// current MP code and a flag indicating the cursor should be updated to show the MP code
+	private int currentMp = 8000;
+	private boolean mpCursorDirty = false;
+	// system-millisecond deadline after which the cursor reverts to normal once MP returns to 8000
+	private long mpLingerEndTime = 0;
+	private static final long MP_CURSOR_LINGER_MS = 3000; // 3 s linger after MP returns to 8000
 	
 	// the pending next status line to set on the Java ui (reset to null when set in the ui) 
 	private String newStatusLine = null;
@@ -156,10 +168,39 @@ public class UiRefresher implements ActionListener, iMesaMachineDataAccessor, Po
 				this.doRepaint = false;
 			}
 			
-			// set the new cursor if a new one was given
-			if (this.newCursorBitmap != null) {
-				this.mainWindow.getDisplayPane().setCursor(this.newCursorBitmap, this.newCursorHotspotX, this.newCursorHotspotY);
-				this.newCursorBitmap = null;
+			// set the cursor: MP code cursor only when the status bar is hidden;
+			// when the status bar is visible, use normal Mesa cursor handling
+			if (!this.mainWindow.isStatusLineVisible()) {
+				// status bar hidden: show MP code on cursor
+				if (this.mpCursorDirty) {
+					this.mainWindow.getDisplayPane().setMpCodeCursor(this.currentMp);
+					this.mpCursorDirty = false;
+					this.newCursorBitmap = null;
+				} else if (this.mpLingerEndTime > 0) {
+					// MP is back to 8000 but still within the linger window; once it expires
+					// immediately restore the last Mesa-defined cursor.
+					if (System.currentTimeMillis() >= this.mpLingerEndTime) {
+						this.mpLingerEndTime = 0;
+						if (this.lastNormalCursorBitmap != null) {
+							this.mainWindow.getDisplayPane().setCursor(
+									this.lastNormalCursorBitmap,
+									this.lastNormalCursorHotspotX,
+									this.lastNormalCursorHotspotY);
+						}
+						this.newCursorBitmap = null;
+					}
+				} else if (this.newCursorBitmap != null) {
+					this.mainWindow.getDisplayPane().setCursor(this.newCursorBitmap, this.newCursorHotspotX, this.newCursorHotspotY);
+					this.newCursorBitmap = null;
+				}
+			} else {
+				// status bar visible: clear any pending MP cursor state and apply normal cursor
+				this.mpCursorDirty = false;
+				this.mpLingerEndTime = 0;
+				if (this.newCursorBitmap != null) {
+					this.mainWindow.getDisplayPane().setCursor(this.newCursorBitmap, this.newCursorHotspotX, this.newCursorHotspotY);
+					this.newCursorBitmap = null;
+				}
 			}
 			
 			// update the status line if there is a new one
@@ -169,17 +210,24 @@ public class UiRefresher implements ActionListener, iMesaMachineDataAccessor, Po
 				this.newStatusLine = null;
 			}
 			
-			// if there is a stop message from the mesa engine: let it alternate with the last status line
+			// if there is a stop message from the mesa engine: show in title bar when the status line is hidden, otherwise let it alternate with the last status line
 			if (this.engineEndedMessage != null) {
-				long now = System.currentTimeMillis();
-				if ((now - this.lastStatusLineSwitch) > STATUS_SWITCH_INTERVAL) {
-					if (this.statusLineIsEndedMessage) {
-						this.mainWindow.setStatusLine(this.lastStatusLine);
-					} else {
-						this.mainWindow.setStatusLine(this.engineEndedMessage);
+				if (!this.mainWindow.isStatusLineVisible()) {
+					// status bar hidden: append the message to the window title
+					this.mainWindow.setTitleSuffix(this.engineEndedMessage);
+				} else {
+					// status bar visible: clear any title suffix and alternate the status line
+					this.mainWindow.setTitleSuffix(null);
+					long now = System.currentTimeMillis();
+					if ((now - this.lastStatusLineSwitch) > STATUS_SWITCH_INTERVAL) {
+						if (this.statusLineIsEndedMessage) {
+							this.mainWindow.setStatusLine(this.lastStatusLine);
+						} else {
+							this.mainWindow.setStatusLine(this.engineEndedMessage);
+						}
+						this.statusLineIsEndedMessage = !this.statusLineIsEndedMessage;
+						this.lastStatusLineSwitch = now;
 					}
-					this.statusLineIsEndedMessage = !this.statusLineIsEndedMessage;
-					this.lastStatusLineSwitch = now;
 				}
 			}
 		}
@@ -201,9 +249,21 @@ public class UiRefresher implements ActionListener, iMesaMachineDataAccessor, Po
 	@Override
 	public void acceptMP(int mp) {
 		synchronized(this) {
+			int prevMp = this.currentMp;
+			this.currentMp = mp;
 			this.statusMpPart = String.format(" %04d ", mp);
 			this.newStatusLine = this.statusMpPart + this.statusStatsPart;
-		}	
+			if (mp != 8000) {
+				// show the MP code in the cursor instead of the normal mouse pointer
+				this.mpCursorDirty = true;
+				this.mpLingerEndTime = 0; // cancel any pending linger
+			} else if (prevMp != 8000) {
+				// MP returned to normal operation: show 8000 in the cursor, then linger
+				// before restoring the Mesa-defined cursor
+				this.mpCursorDirty = true; // trigger one render of the 8000 cursor
+				this.mpLingerEndTime = System.currentTimeMillis() + MP_CURSOR_LINGER_MS;
+			}
+		}
 	}
 
 	// invoked by the mesa engine at more or less regular intervals
@@ -254,9 +314,14 @@ public class UiRefresher implements ActionListener, iMesaMachineDataAccessor, Po
 	@Override
 	public void setPointerBitmap(short[] bitmap, int hotspotX, int hotspotY) {
 		synchronized(this) {
-			this.newCursorBitmap = bitmap;
-			this.newCursorHotspotX = hotspotX;
-			this.newCursorHotspotY = hotspotY;
+			this.lastNormalCursorBitmap = bitmap;
+			this.lastNormalCursorHotspotX = hotspotX;
+			this.lastNormalCursorHotspotY = hotspotY;
+			if (this.currentMp == 8000 && this.mpLingerEndTime == 0) {
+				this.newCursorBitmap = bitmap;
+				this.newCursorHotspotX = hotspotX;
+				this.newCursorHotspotY = hotspotY;
+			}
 		}
 	}
 	

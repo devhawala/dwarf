@@ -39,10 +39,16 @@ import java.awt.event.WindowEvent;
 
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.JToolBar;
 import javax.swing.SwingConstants;
+
+import dev.hawala.dmachine.Utils;
 
 /**
  * Main UI frame for a Dwarf machine.
@@ -50,7 +56,14 @@ import javax.swing.SwingConstants;
  * @author Dr. Hans-Walter Latz / Berlin (2017)
  */
 public class MainUI {
-	
+
+	static {
+		// Must be set before any AWT/Swing components are created to take effect on macOS.
+		if (Utils.IS_MACOS) {
+			System.setProperty("apple.laf.useScreenMenuBar", "true");
+		}
+	}
+
 	/**
 	 * possible states of the mesa engine, controlling the 'enabled' states of the
 	 * Start/Stop buttons.
@@ -63,10 +76,21 @@ public class MainUI {
 	// the top-level frame for the UI
 	private JFrame frmDwarfMesaEngine;
 	
+	private final String emulatorName;
 	private final String title;
 	private final int displayWidth;
 	private final int displayHeight;
 	
+	// macOS: menu-bar controls (null on non-macOS)
+	private JMenuBar menuBar;
+	private JMenuItem miStart;
+	private JMenuItem miStop;
+	private JMenuItem miInsertFloppy;
+	private JCheckBoxMenuItem ckmiReadOnlyFloppy;
+	private JMenuItem miEjectFloppy;
+	private JMenuItem miFloppyFilename;
+
+	// non-macOS: toolbar controls (null on macOS)
 	private JToolBar toolBar;
 	private DisplayPane displayPanel;
 	private JLabel statusLine;
@@ -90,6 +114,7 @@ public class MainUI {
 	 * @param runInFullscreen let it be a fullscreen application?
 	 */
 	public MainUI(String emulatorName, String title, int displayWidth, int displayHeight, boolean resizable, boolean colorDisplay, boolean runInFullscreen) {
+		this.emulatorName = emulatorName;
 		this.title = title;
 		this.displayWidth = displayWidth;
 		this.displayHeight = displayHeight;
@@ -114,39 +139,80 @@ public class MainUI {
 			}
 		}
 		
-		this.toolBar = new JToolBar();
-		this.toolBar.setFloatable(false);
-		this.toolBar.setOrientation(SwingConstants.HORIZONTAL);
-		this.frmDwarfMesaEngine.getContentPane().add(this.toolBar, BorderLayout.NORTH);
-		
-		this.btnStart = new JButton("Start");
-		this.btnStart.setToolTipText("boot the mesa engine");
-		this.toolBar.add(btnStart);
-		
-		this.btnStop = new JButton("Stop");
-		this.btnStop.setToolTipText("stop the running engine and persist disk(s) modifications");
-		this.toolBar.add(btnStop);
-		
-		this.lblSep1 = new JLabel("   Floppy: ");
-		this.toolBar.add(lblSep1);
-		
-		this.btnInsertFloppy = new JButton("Insert");
-		this.btnInsertFloppy.setToolTipText("insert a floppy disk image (*.img), possibly in read-only mode\nif the R/O checkbox is checked ");
-		this.toolBar.add(btnInsertFloppy);
-		
-		this.ckReadOnlyFloppy = new JCheckBox("R/O");
-		this.ckReadOnlyFloppy.setToolTipText("if checked: force the next floppy inserted to be read-only");
-		this.toolBar.add(ckReadOnlyFloppy);
-		
-		this.btnEjectFloppy = new JButton("Eject");
-		this.btnEjectFloppy.setToolTipText("eject the floppy currently inserted");
-		this.toolBar.add(btnEjectFloppy);
-		
-		this.toolBar.add(new JLabel(" "));
-		
-		this.lblFloppyFilename = new JLabel("...");
-		this.lblFloppyFilename.setFont(new Font("Dialog", Font.PLAIN, 12));
-		this.toolBar.add(lblFloppyFilename);
+		if (Utils.IS_MACOS) {
+			// macOS: use a native menu bar instead of a toolbar
+			this.menuBar = new JMenuBar();
+			this.frmDwarfMesaEngine.setJMenuBar(this.menuBar);
+			
+			// Engine menu
+			JMenu menuEngine = new JMenu("Engine");
+			this.menuBar.add(menuEngine);
+			
+			this.miStart = new JMenuItem("Start");
+			this.miStart.setToolTipText("boot the mesa engine");
+			menuEngine.add(this.miStart);
+			
+			this.miStop = new JMenuItem("Stop");
+			this.miStop.setToolTipText("stop the running engine and persist disk(s) modifications");
+			menuEngine.add(this.miStop);
+			
+			// Floppy menu
+			JMenu menuFloppy = new JMenu("Floppy");
+			this.menuBar.add(menuFloppy);
+			
+			this.miInsertFloppy = new JMenuItem("Insert Floppy...");
+			this.miInsertFloppy.setToolTipText("insert a floppy disk image (*.img), possibly in read-only mode if R/O is checked");
+			menuFloppy.add(this.miInsertFloppy);
+			
+			this.ckmiReadOnlyFloppy = new JCheckBoxMenuItem("Read-Only");
+			this.ckmiReadOnlyFloppy.setToolTipText("if checked: force the next floppy inserted to be read-only");
+			menuFloppy.add(this.ckmiReadOnlyFloppy);
+			
+			this.miEjectFloppy = new JMenuItem("Eject Floppy");
+			this.miEjectFloppy.setToolTipText("eject the floppy currently inserted");
+			menuFloppy.add(this.miEjectFloppy);
+			
+			menuFloppy.addSeparator();
+			
+			this.miFloppyFilename = new JMenuItem("\u2011"); //macOS doesn't seem to like "-" in menu bar item names
+			this.miFloppyFilename.setEnabled(false);
+			menuFloppy.add(this.miFloppyFilename);
+		} else {
+			// Windows / Linux: use the original toolbar
+			this.toolBar = new JToolBar();
+			this.toolBar.setFloatable(false);
+			this.toolBar.setOrientation(SwingConstants.HORIZONTAL);
+			this.frmDwarfMesaEngine.getContentPane().add(this.toolBar, BorderLayout.NORTH);
+			
+			this.btnStart = new JButton("Start");
+			this.btnStart.setToolTipText("boot the mesa engine");
+			this.toolBar.add(this.btnStart);
+			
+			this.btnStop = new JButton("Stop");
+			this.btnStop.setToolTipText("stop the running engine and persist disk(s) modifications");
+			this.toolBar.add(this.btnStop);
+			
+			this.lblSep1 = new JLabel("   Floppy: ");
+			this.toolBar.add(this.lblSep1);
+			
+			this.btnInsertFloppy = new JButton("Insert");
+			this.btnInsertFloppy.setToolTipText("insert a floppy disk image (*.img), possibly in read-only mode\nif the R/O checkbox is checked ");
+			this.toolBar.add(this.btnInsertFloppy);
+			
+			this.ckReadOnlyFloppy = new JCheckBox("R/O");
+			this.ckReadOnlyFloppy.setToolTipText("if checked: force the next floppy inserted to be read-only");
+			this.toolBar.add(this.ckReadOnlyFloppy);
+			
+			this.btnEjectFloppy = new JButton("Eject");
+			this.btnEjectFloppy.setToolTipText("eject the floppy currently inserted");
+			this.toolBar.add(this.btnEjectFloppy);
+			
+			this.toolBar.add(new JLabel(" "));
+			
+			this.lblFloppyFilename = new JLabel("...");
+			this.lblFloppyFilename.setFont(new Font("Dialog", Font.PLAIN, 12));
+			this.toolBar.add(this.lblFloppyFilename);
+		}
 		
 		this.displayPanel = (colorDisplay)
 				? new Display8BitColorPane(this.displayWidth, this.displayHeight)
@@ -190,65 +256,123 @@ public class MainUI {
 	}
 	
 	/**
+	 * Check if the status line is currently visible
+	 * 
+	 * @return {@code true} if the status line is currently visible.
+	 */
+	public boolean isStatusLineVisible() {
+		return this.statusLine != null && this.statusLine.isVisible();
+	}
+
+	/**
+	 * Set the visibility of the status line.
+	 *
+	 * @param visible {@code true} to show the status line, {@code false} to hide it.
+	 */
+	public void setStatusLineVisible(boolean visible) {
+		if (this.statusLine == null) { return; }
+		this.statusLine.setVisible(visible);
+		this.frmDwarfMesaEngine.pack();
+	}
+	
+	/**
+	 * Update the window title, optionally appending an engine message if available.
+	 * Used when the status line is invisible.
+	 * When {@code suffix} is non-null the title becomes
+	 * {@code "<emulator> Mesa Engine - <title> - <message>"};
+	 * when {@code null} it reverts to the base title.
+	 *
+	 * @param suffix the message to append, or {@code null} to clear it.
+	 */
+	public void setTitleSuffix(String suffix) {
+		String baseTitle = this.emulatorName + " Mesa Engine - " + this.title;
+		String trimmed = (suffix != null) ? suffix.trim() : "";
+		this.frmDwarfMesaEngine.setTitle(
+				!trimmed.isEmpty() ? baseTitle + " - " + trimmed : baseTitle);
+	}
+	
+	/**
 	 * Change the running state for setting the 'enabled' states of the
 	 * Start/Stop buttons.
 	 * 
 	 * @param state the new state of the mesa engine
 	 */
 	public void setRunningState(RunningState state) {
-		switch(state) {
-		case notRunning:
-			this.btnStart.setEnabled(true);
-			this.btnStop.setEnabled(false);
-			return;
-		case running:
-			this.btnStart.setEnabled(false);
-			this.btnStop.setEnabled(true);
-			return;
-		case stopped:
-			this.btnStart.setEnabled(false);
-			this.btnStop.setEnabled(false);
-			return;
+		if (Utils.IS_MACOS) {
+			switch(state) {
+			case notRunning:
+				this.miStart.setEnabled(true);
+				this.miStop.setEnabled(false);
+				return;
+			case running:
+				this.miStart.setEnabled(false);
+				this.miStop.setEnabled(true);
+				return;
+			case stopped:
+				this.miStart.setEnabled(false);
+				this.miStop.setEnabled(false);
+				return;
+			}
+		} else {
+			switch(state) {
+			case notRunning:
+				this.btnStart.setEnabled(true);
+				this.btnStop.setEnabled(false);
+				return;
+			case running:
+				this.btnStart.setEnabled(false);
+				this.btnStop.setEnabled(true);
+				return;
+			case stopped:
+				this.btnStart.setEnabled(false);
+				this.btnStop.setEnabled(false);
+				return;
+			}
 		}
 	}
 	
 	/**
-	 * Add an action callback to the 'Start' button.
+	 * Add an action callback to the 'Start' control.
 	 * @param action callback instance.
 	 */
 	public void addStartAction(ActionListener action) {
-		this.btnStart.addActionListener(action);
+		if (Utils.IS_MACOS) { this.miStart.addActionListener(action); }
+		else { this.btnStart.addActionListener(action); }
 	}
 	
 	/**
-	 * Add an action callback to the 'Stop' button.
+	 * Add an action callback to the 'Stop' control.
 	 * @param action callback instance.
 	 */
 	public void addStopAction(ActionListener action) {
-		this.btnStop.addActionListener(action);
+		if (Utils.IS_MACOS) { this.miStop.addActionListener(action); }
+		else { this.btnStop.addActionListener(action); }
 	}
 	
 	/**
-	 * Add an action callback to the 'Insert' (floppy) button.
+	 * Add an action callback to the 'Insert' (floppy) control.
 	 * @param action callback instance.
 	 */
 	public void addInsertFloppyAction(ActionListener action) {
-		this.btnInsertFloppy.addActionListener(action);
+		if (Utils.IS_MACOS) { this.miInsertFloppy.addActionListener(action); }
+		else { this.btnInsertFloppy.addActionListener(action); }
 	}
 	
 	/**
-	 * Add an action callback to the 'Eject' (floppy) button.
+	 * Add an action callback to the 'Eject' (floppy) control.
 	 * @param action callback instance.
 	 */
 	public void addEjectFloppyAction(ActionListener action) {
-		this.btnEjectFloppy.addActionListener(action);
+		if (Utils.IS_MACOS) { this.miEjectFloppy.addActionListener(action); }
+		else { this.btnEjectFloppy.addActionListener(action); }
 	}
 	
 	/**
-	 * Get the state of the (floppy) 'R/O' checkbox.
-	 * @return checked {@code true} if the 'R/O' checkbox is checked.
+	 * Get the state of the (floppy) 'R/O' control.
+	 * @return {@code true} if the 'R/O' control is checked/selected.
 	 */
 	public boolean writeProtectFloppy() {
+		if (Utils.IS_MACOS) { return this.ckmiReadOnlyFloppy.isSelected(); }
 		return this.ckReadOnlyFloppy.isSelected();
 	}
 	
@@ -260,16 +384,30 @@ public class MainUI {
 	 *   passing a non-empty floppy name will invert these states.
 	 */
 	public void setFloppyName(String floppyName) {
-		if (floppyName == null || floppyName.length() == 0) {
-			this.lblFloppyFilename.setText("-");
-			this.btnInsertFloppy.setEnabled(true);
-			this.ckReadOnlyFloppy.setEnabled(true);
-			this.btnEjectFloppy.setEnabled(false);
+		if (Utils.IS_MACOS) {
+			if (floppyName == null || floppyName.length() == 0) {
+				this.miFloppyFilename.setText("\u2011"); //macOS doesn't seem to like "-" in menu bar item names
+				this.miInsertFloppy.setEnabled(true);
+				this.ckmiReadOnlyFloppy.setEnabled(true);
+				this.miEjectFloppy.setEnabled(false);
+			} else {
+				this.miFloppyFilename.setText(floppyName);
+				this.miInsertFloppy.setEnabled(false);
+				this.ckmiReadOnlyFloppy.setEnabled(false);
+				this.miEjectFloppy.setEnabled(true);
+			}
 		} else {
-			this.lblFloppyFilename.setText(floppyName);
-			this.btnInsertFloppy.setEnabled(false);
-			this.ckReadOnlyFloppy.setEnabled(false);
-			this.btnEjectFloppy.setEnabled(true);
+			if (floppyName == null || floppyName.length() == 0) {
+				this.lblFloppyFilename.setText("-");
+				this.btnInsertFloppy.setEnabled(true);
+				this.ckReadOnlyFloppy.setEnabled(true);
+				this.btnEjectFloppy.setEnabled(false);
+			} else {
+				this.lblFloppyFilename.setText(floppyName);
+				this.btnInsertFloppy.setEnabled(false);
+				this.ckReadOnlyFloppy.setEnabled(false);
+				this.btnEjectFloppy.setEnabled(true);
+			}
 		}
 	}
 	
@@ -286,19 +424,29 @@ public class MainUI {
 		JFrame frame = new JFrame("Fullscreen");
 		frame.getContentPane().setLayout(new BorderLayout(2, 2));
 		
-		JToolBar toolBar = new JToolBar();
-		toolBar.setFloatable(false);
-		toolBar.setOrientation(SwingConstants.HORIZONTAL);
-		frame.getContentPane().add(toolBar, BorderLayout.NORTH);
-		
-		JButton btnStart = new JButton("Start");
-		btnStart.setToolTipText("boot the mesa engine");
-		toolBar.add(btnStart);
-		
-		JButton btnStop = new JButton("Stop");
-		btnStop.setToolTipText("stop the running engine and persist disk(s) modifications");
-		toolBar.add(btnStop);
-		btnStop.addActionListener(e -> { frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING)); System.exit(0); });
+		if (Utils.IS_MACOS) {
+			JMenuBar menuBar = new JMenuBar();
+			frame.setJMenuBar(menuBar);
+			JMenu menuEngine = new JMenu("Engine");
+			menuBar.add(menuEngine);
+			JMenuItem miStop = new JMenuItem("Stop");
+			miStop.addActionListener(e -> { frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING)); System.exit(0); });
+			menuEngine.add(miStop);
+		} else {
+			JToolBar toolBar = new JToolBar();
+			toolBar.setFloatable(false);
+			toolBar.setOrientation(SwingConstants.HORIZONTAL);
+			frame.getContentPane().add(toolBar, BorderLayout.NORTH);
+			
+			JButton btnStart = new JButton("Start");
+			btnStart.setToolTipText("boot the mesa engine");
+			toolBar.add(btnStart);
+			
+			JButton btnStop = new JButton("Stop");
+			btnStop.setToolTipText("stop the running engine and persist disk(s) modifications");
+			toolBar.add(btnStop);
+			btnStop.addActionListener(e -> { frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING)); System.exit(0); });
+		}
 		
 		JLabel label = new JLabel("", JLabel.CENTER);
 		label.setText("This is not yet in fullscreen mode!");

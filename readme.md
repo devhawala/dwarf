@@ -250,7 +250,7 @@ with DST, whereas Alaska should be -560 without DST resp -480 with DST)
 _optional, default_: 0 (i.e. GMT)
 
 - `autostart`  
-the boolean value `true`lets the machine start automatically after
+the boolean value `true` lets the machine start automatically after
 building up the Dwarf UI; by default, the Dwarf machine must be started
 manually with the _Start_ button in the toolbar.  
 _optional, default_: `false`
@@ -277,6 +277,13 @@ the following values usually work:
 `xdeNoBlinkWorkAround = 150 : 1987-06-01` for CoPilot 12.3    
 `xdeNoBlinkWorkAround = 150 : 1987-06-01` for Tajo 12.3 + Hacks    
 `xdeNoBlinkWorkAround = 81 : 1995-06-01 ` for Tajo 15.3 (Dawn)
+
+- `showStatusLine`    
+the boolean value `false` hides the status line at the bottom.
+When the status line is hidden, the mouse cursor will display the MP codes (similar to how
+GlobalView and the 6085 implement it) and engine status messages will show up in the
+title bar of the main window.
+_optional, default_: `true`
 
 The following configuration parameters are specific for Draco (6085) machines:
 
@@ -483,15 +490,20 @@ file selection dialog for "inserting" the floppy. If the _R/O_ checkbox is check
 floppy will be loaded in read-only mode, rejecting any attempts to modify the diskette.
 Legacy floppy images are always forced to be loaded in read-only mode.  
 The _Eject_ button removes the floppy, overwriting the floppy image with the new
-content if the floppy was modified.  
+content if the floppy was modified.
+
+On macOS platforms, the button bar is replaced with a native macOS menu bar implementation.
+All of the features of the button bar are available under the Engine (which includes Start
+and Stop) and Floppy (which includes insert/eject floppy, the R/O toggle and the currently
+inserted floppy file name, if any) menu bar items.  
 
 ##### Keyboard
 
 The keyboard mapping can be freely defined through a mapping file, however providing a
 sensible fallback (at least if you have a german keyboard) if no file is specified.
 
-The probably most interesting information is about the special Xerox command keys
-not available on modern PCs, which are mapped to keyboard keys by default resp. additionally by the sample
+Probably the most interesting information is about the special Xerox command keys not
+being available on modern PCs, which are mapped to keyboard keys by default resp. additionally by the sample
 mapping file `kbd_linux_de_DE.map` as follows:
 
 Xerox key|builtin default|kbd_linux_de_DE.map
@@ -520,12 +532,19 @@ Font||F11
 Special||Alt
 Expand||AltGr , Ctrl-Alt
 
+Note that on macOS, due to some issues with using Ctrl as a modifier key, the default modifier key
+is set to Cmd.
+
 ##### Status line
 
 The status line of Dwarfs emulator window shows the current MP code (maintenance panel code)
 at the left, followed by some statistics of the running machine (uptime in seconds, number
 of instructions executed so far, number of disk page reads/writes, number of floppy page
 reads/writes, number of network packets received/sent).
+
+When the status line is hidden, the mouse cursor will display the MP codes (similar to how
+GlobalView and the 6085 implement it) and engine status messages will show up in the
+title bar of the main window.
 
 #### Halting the running system
 
@@ -595,6 +614,12 @@ This does however not affect the normal disk operations, as ViewPoint and the XD
 
 ### Development history
 
+- 2026-03-20 (authored by iblowmymind)
+added `showStatusLine` configuration parameter
+added optional cursor MP code display implementation
+added macOS native menu bar implementation
+set the default modifier key to Cmd on macOS since Ctrl doesn't work
+
 - 2025-01-11    
 bugfix for issue#12: less restrictive label-check for 6085 disks 
 
@@ -606,7 +631,7 @@ added 3 undocumented instructions, apparently introduced by Fuji Xerox (impl. ta
 
 - 2020-11-24    
 added fullscreen support for Duchess (command line option `-fullscreen`)    
-added `autoclose`configuration parameter and `-autoclose` command line parameter to Duchess and Draco
+added `autoclose` configuration parameter and `-autoclose` command line parameter to Duchess and Draco
 
 - 2020-07-05    
 introduced the Draco 6085 emulation as second machine type for the Dwarf Mesa machine kernel    

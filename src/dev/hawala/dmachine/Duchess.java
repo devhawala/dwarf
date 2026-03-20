@@ -116,11 +116,14 @@ public class Duchess {
 	private static String initialFloppy = null;
 	private static String floppyDirectory = null;
 	private static String keyboardMapFile = null;
-	private static int xeroxControlKeyCode = eKeyEventCode.VK_CONTROL.getCode();
+	private static int xeroxControlKeyCode = Utils.IS_MACOS
+			? eKeyEventCode.VK_META.getCode()
+			: eKeyEventCode.VK_CONTROL.getCode();
 	private static boolean resetKeysOnFocusLost = true;
 	private static String netHubHost = "";
 	private static int netHubPort = 3333;
 	private static int localTimeOffsetMinutes = 0;
+	private static boolean showStatusLine = true;
 	
 	// control flags for the mesa engine
 	private static boolean doStartEngine = false;
@@ -204,6 +207,7 @@ public class Duchess {
 			xeroxControlKeyCode = Utils.parseKeycode(ctrlKeyCode);
 		}
 		resetKeysOnFocusLost = props.getBoolean("resetKeysOnFocusLost", resetKeysOnFocusLost);
+		showStatusLine = props.getBoolean("showStatusLine", showStatusLine);
 		
 		addressBitsReal = Math.max(PrincOpsDefs.MIN_REAL_ADDRESSBITS, Math.min(PrincOpsDefs.MAX_REAL_ADDRESSBITS, addressBitsReal));
 		addressBitsVirtual = Math.max(addressBitsReal, Math.min(PrincOpsDefs.MAX_VIRTUAL_ADDRESSBITS, addressBitsVirtual));
@@ -417,6 +421,7 @@ public class Duchess {
 			try {	
 				// setup the ui main window
 				window = new MainUI("Dwarf / Duchess", title, displayWidth, displayHeight, true, displayTypeColor, runInFullscreen); // TODO: make resizable a program/configuration parameter?
+				window.setStatusLineVisible(showStatusLine);
 				window.getFrame().setVisible(true);
 				
 				// attach the mouse and keyboard handlers (java-ui => mesa engine) 

@@ -37,7 +37,9 @@ import dev.hawala.dmachine.dwarf.eKeyEventCode;
  */
 public class Utils {
 
-	
+	// true when running on macOS, false if otherwise
+	public static final boolean IS_MACOS = System.getProperty("os.name", "").toLowerCase().startsWith("mac");
+
 	// check if the filename identifies an readably file
 	public static boolean isFileOk(String kind, String filename) {
 		if (filename == null) {

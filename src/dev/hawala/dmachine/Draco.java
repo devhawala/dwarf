@@ -136,8 +136,11 @@ public class Draco {
 	private static int localTimeOffsetMinutes = 0;
 	
 	private static String keyboardMapFile = null;
-	private static int xeroxControlKeyCode = eKeyEventCode.VK_CONTROL.getCode();
+	private static int xeroxControlKeyCode = Utils.IS_MACOS
+			? eKeyEventCode.VK_META.getCode()
+			: eKeyEventCode.VK_CONTROL.getCode();
 	private static boolean resetKeysOnFocusLost = true;
+	private static boolean showStatusLine = true;
 	
 	private static int daysBackInTime = 0;
 	
@@ -246,6 +249,7 @@ public class Draco {
 			xeroxControlKeyCode = Utils.parseKeycode(ctrlKeyCode);
 		}
 		resetKeysOnFocusLost = props.getBoolean("resetKeysOnFocusLost", resetKeysOnFocusLost);
+		showStatusLine = props.getBoolean("showStatusLine", showStatusLine);
 		
 		String mac = props.getString("processorId", null);
 		if (mac == null) {
@@ -578,6 +582,7 @@ public class Draco {
 				int displayWidth = Mem.displayPixelWidth;
 				int displayHeight = Mem.displayPixelHeight;
 				window = new MainUI("Dwarf / Draco 6085", title, displayWidth, displayHeight, true, false, false); // TODO: make resizable a program/configuration parameter?
+				window.setStatusLineVisible(showStatusLine);
 				window.getFrame().setVisible(true);
 				
 				// attach the mouse and keyboard handlers (java-ui => mesa engine) 

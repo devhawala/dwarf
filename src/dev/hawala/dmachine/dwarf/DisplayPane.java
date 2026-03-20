@@ -170,6 +170,119 @@ public abstract class DisplayPane extends JComponent {
 		}
 	}
 	
+	// MP code cursor support: pixel data for digits 0-9 extracted from a 1-bit BMP.
+	// The source bitmap is 70x10 pixels: 10 digit tiles each 7 pixels wide (5px digit
+	// content + 1px padding on each side) and 10 pixels tall (8px content + 1px
+	// padding top and bottom).  Rows are stored in visual top-to-bottom order (y=0..9),
+	// each row encoded as 9 bytes (MSB = leftmost pixel).  A '0' bit is an active (black)
+	// pixel; a '1' bit is background (transparent). Taken from the Dawn emulator (mpcode.bmp),
+	// credits to Don Woodward, 2004.
+	private static final byte[] MP_DIGIT_ROWS = {
+		// y=0: top border (all background)
+		(byte)0xFF, (byte)0xFF, (byte)0xFF, (byte)0xFF, (byte)0xFF, (byte)0xFF, (byte)0xFF, (byte)0xFF, (byte)0xFC,
+		// y=1
+		(byte)0xC7, (byte)0xDE, (byte)0x1C, (byte)0x3E, (byte)0x70, (byte)0x78, (byte)0xC1, (byte)0xC7, (byte)0x8C,
+		// y=2
+		(byte)0xBB, (byte)0x9F, (byte)0xEF, (byte)0xDE, (byte)0x77, (byte)0xF7, (byte)0xFD, (byte)0xBB, (byte)0x74,
+		// y=3
+		(byte)0xBB, (byte)0x5F, (byte)0xEF, (byte)0xDD, (byte)0x77, (byte)0xEF, (byte)0xFB, (byte)0xBB, (byte)0x74,
+		// y=4
+		(byte)0xBB, (byte)0xDF, (byte)0xEE, (byte)0x3D, (byte)0x70, (byte)0xE9, (byte)0xFB, (byte)0xC7, (byte)0x64,
+		// y=5
+		(byte)0xBB, (byte)0xDF, (byte)0xDF, (byte)0xDB, (byte)0x7F, (byte)0x66, (byte)0xF7, (byte)0xBB, (byte)0x94,
+		// y=6
+		(byte)0xBB, (byte)0xDF, (byte)0xBF, (byte)0xD8, (byte)0x3F, (byte)0x6E, (byte)0xF7, (byte)0xBB, (byte)0xF4,
+		// y=7
+		(byte)0xBB, (byte)0xDF, (byte)0x7F, (byte)0xDF, (byte)0x7F, (byte)0x6E, (byte)0xEF, (byte)0xBB, (byte)0xEC,
+		// y=8
+		(byte)0xC7, (byte)0xDE, (byte)0x0C, (byte)0x3F, (byte)0x70, (byte)0xF1, (byte)0xEF, (byte)0xC7, (byte)0x1C,
+		// y=9: bottom border (all background)
+		(byte)0xFF, (byte)0xFF, (byte)0xFF, (byte)0xFF, (byte)0xFF, (byte)0xFF, (byte)0xFF, (byte)0xFF, (byte)0xFC
+	};
+
+	/**
+	 * Returns {@code true} if the pixel at tile-column {@code x} and tile-row {@code y}
+	 * of the given digit tile (0-9) should be drawn as an opaque black pixel.
+	 */
+	private static boolean isMpDigitPixelActive(int digit, int x, int y) {
+		int globalX   = digit * 7 + x;
+		int byteIndex = y * 9 + globalX / 8;
+		int bitShift  = 7 - (globalX % 8);
+		return ((MP_DIGIT_ROWS[byteIndex] >> bitShift) & 1) == 0; // 0 = black = active
+	}
+
+	/**
+	 * Set the cursor to display the given 4-digit MP code.  This is called whenever
+	 * the MP code is different from 8000 (normal operation) so that the cursor shows
+	 * the current machine-state code instead of the Mesa-defined mouse pointer shape.
+	 * <p>
+	 * The two upper digits are placed side-by-side starting at the top-left of the
+	 * cursor image, and the two lower digits are placed slightly inset below them
+	 * (matching the reference layout used by the 6085).  Any part of a digit tile
+	 * that falls outside the cursor image boundary is silently clipped.
+	 * </p>
+	 *
+	 * @param mp the current MP code (0-9999)
+	 */
+	public void setMpCodeCursor(int mp) {
+		int n1 = mp / 1000;
+		int n2 = (mp % 1000) / 100;
+		int n3 = (mp % 100)  / 10;
+		int n4 = mp % 10;
+
+		int imgWidth  = this.cursorBits.getWidth();
+		int imgHeight = this.cursorBits.getHeight();
+
+		DataBufferByte dbb = (DataBufferByte)this.cursorBits.getRaster().getDataBuffer();
+		byte[] cdata = dbb.getData();
+
+		// Clear entire cursor image to transparent (A=0 for TYPE_4BYTE_ABGR)
+		Arrays.fill(cdata, (byte)0);
+
+		// Each digit tile is 7 wide x 10 tall, but rows 0 and 9 are blank padding.
+		// When the cursor image height is < 20 pixels (e.g. 16x16) both rows of digits
+		// won't fit with the full 10-row tiles.  In that case "compact" mode strips the
+		// blank padding rows: upper content occupies py=0..7, lower content py=8..15,
+		// filling the 16px cursor exactly with no overlap and no cutoff (no gap is
+		// possible here; a 1px gap would require 17 rows).
+		// For cursor images ≥ 20 px the full tiles are used; upper content is at py=1..8
+		// and lower starts at lowerDestY=9 so that both tiles share the transparent row
+		// at py=9, giving a 1px visible gap between the two content bands.
+		// Digit tile positions (pixels), matching the reference Dawn layout:
+		//   n1 at (0, 0)   n2 at (7, 0)
+		//   n3 at (2, 8)   n4 at (9, 8)   (compact)
+		//   n3 at (2, 9)   n4 at (9, 9)   (non-compact, 1px transparent gap between rows)
+		boolean compact  = imgHeight < 20;
+		int tileRowStart = compact ? 1 : 0;   // first tile row to render (skip top blank)
+		int tileRowEnd   = compact ? 9 : 10;  // exclusive end (skip bottom blank)
+		int lowerDestY   = compact ? 8 : 9;   // where the lower two digits start
+
+		int[] digits = { n1, n2, n3, n4 };
+		int[] destX  = {  0,  7,  2,  9 };
+		int[] destY  = {  0,  0, lowerDestY, lowerDestY };
+
+		for (int d = 0; d < 4; d++) {
+			int digit = digits[d];
+			int dx    = destX[d];
+			int dy    = destY[d];
+			for (int ty = tileRowStart; ty < tileRowEnd; ty++) {
+				int py = dy + (ty - tileRowStart);
+				if (py >= imgHeight) { continue; }
+				for (int tx = 0; tx < 7; tx++) {
+					int px = dx + tx;
+					if (px >= imgWidth) { continue; }
+					if (isMpDigitPixelActive(digit, tx, ty)) {
+						// TYPE_4BYTE_ABGR byte layout per pixel: [A, B, G, R]
+						// Opaque black: A=255, B=0, G=0, R=0 (B/G/R already 0 from fill)
+						cdata[(py * imgWidth + px) * 4] = (byte)255;
+					}
+				}
+			}
+		}
+
+		this.setCursor(this.tk.createCustomCursor(this.cursorBits, new Point(0, 0), "MP"));
+	}
+
 	/**
 	 * Set a new cursor for the Dwarf screen, possibly re-using an already
 	 * (previously) created cursor having the same display characteristics. 
